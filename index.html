@@ -84,6 +84,8 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const UNITS = {
   calc:{name:'計算',subj:'算数'}, speed:{name:'速さ',subj:'算数'}, ratio:{name:'割合と比',subj:'算数'},
   simil:{name:'図形と比（相似）',subj:'算数'}, angle:{name:'角度・多角形',subj:'算数'}, number:{name:'数の性質',subj:'算数'},
+  wasa:{name:'和差算・つるかめ算',subj:'算数'}, count:{name:'場合の数',subj:'算数'}, rule:{name:'規則性・数列',subj:'算数'},
+  solid:{name:'立体図形（体積）',subj:'算数'}, area:{name:'平面図形の面積',subj:'算数'},
   kokugo:{name:'ことわざ・漢字',subj:'国語'},
   heat:{name:'熱量',subj:'理科'}, lever:{name:'てこ',subj:'理科'}, body:{name:'人体・生物',subj:'理科'}, weather:{name:'気象・天体',subj:'理科'},
   history:{name:'歴史（縄文〜平安）',subj:'社会'}, geo:{name:'地理',subj:'社会'},
@@ -93,7 +95,9 @@ const SUBJ_KEY = {'算数':'math','国語':'jpn','理科':'sci','社会':'soc'};
 const WEAK_UNIT_MAP = {1:['calc'],2:['speed'],3:['ratio','simil'],4:['angle'],5:['heat'],6:['lever'],7:['body'],8:['history'],9:['kokugo'],10:[]};
 const UNIT_RULES = [
   ['speed',/速さ|旅人|流水|時計|通過|ダイヤグラム/],['simil',/相似|図形と比|辺の比|面積比/],
-  ['ratio',/割合|比|相当|損益|売買|濃さ|食塩水|平均/],['angle',/角|多角形/],['number',/約数|倍数|数の性質|既約|数に関する|規則/],['calc',/計算/],
+  ['wasa',/和差|過不足|年令|年齢|いもづる|つるかめ|硬貨|平均/],['count',/場合の数|試合数|並べ方|選び方|正方形の個数|組み合わせ/],
+  ['rule',/規則|群数列|数列|周期/],['solid',/立体|体積|回転体|水の深さ|表面積|展開図/],['area',/面積|台形|おうぎ形|高さが等しい/],
+  ['ratio',/割合|比|相当|損益|売買|濃さ|食塩水/],['angle',/角|多角形/],['number',/約数|倍数|数の性質|既約|数に関する/],['calc',/計算/],
   ['heat',/熱|あたたま|温度/],['lever',/てこ|滑車|輪軸|力の|ばね/],
   ['weather',/気象|天気|前線|台風|月|太陽|天体|星|雲/],['body',/消化|人体|生物|光合成|植物|動物|昆虫|食物|栄養|アゲハ|つり合い/],
   ['history',/時代|歴史|天皇|古墳|遺跡|貝塚|律令|土偶|妹子|太子|政治|文化|外交/],['geo',/地理|県|国土|農|工業|漁業|地名|島|川|気候|海岸|都市/],
@@ -123,6 +127,7 @@ function G(r){
   return {ri,pick,until};
 }
 const num=(text,ans,ansText,explain,suffix)=>({type:'num',text,ans,ansText:ansText??String(ans),explain,suffix});
+const fmt2=v=>String(Math.round(v*100)/100);   /* 小数第2位までの表示（3.14をかける問題の答え） */
 
 const GENS = [
   /* 計算 */
@@ -321,6 +326,112 @@ const GENS = [
       const m=W*(L/2-p); if(m%p) return null; const x=m/p;
       return num(`長さ${L}cm、重さ${W}gの太さが一様な棒があります。左はしから${p}cmのところを支点にして、左はしにおもりをつるして棒を水平につり合わせるには、何gのおもりが必要ですか。`,x,String(x),
         `太さが一様な棒の重さは、まん中（左はしから${L/2}cm）にかかると考える。\n支点からまん中までは ${L/2} − ${p} = ${L/2-p}cm\n${W} × ${L/2-p} = □ × ${p} → □ = ${x}g`,'g');});}},
+
+  /* ===== 和差算・つるかめ算（平均・年令算・過不足算・硬貨・いもづる算） ===== */
+  {id:'wasa-sa',unit:'wasa',level:1,fn(r){const {ri}=G(r);
+    const big=ri(12,60), small=ri(3,big-2), S=big+small, D=big-small, askBig=r()<.5;
+    return num(`2つの数の和が${S}、差が${D}です。${askBig?'大きいほう':'小さいほう'}の数はいくつですか。`,askBig?big:small,String(askBig?big:small),
+      `和差算：大きい数 = (和 + 差) ÷ 2、小さい数 = (和 − 差) ÷ 2\n(${S} + ${D}) ÷ 2 = ${big}、(${S} − ${D}) ÷ 2 = ${small}`);}},
+  {id:'wasa-avg',unit:'wasa',level:1,fn(r){const {ri,until}=G(r);
+    return until(()=>{const n=ri(3,6), a=ri(55,78), d=ri(2,5), x=a+d*(n+1); if(x>100) return null;
+      return num(`ある生徒の、${n}回のテストの平均点は${a}点でした。次の1回で何点とると、${n+1}回の平均点が${a+d}点になりますか。`,x,String(x),
+        `合計点で考える。${n+1}回の合計 = ${a+d} × ${n+1} = ${(a+d)*(n+1)}点、はじめの${n}回の合計 = ${a} × ${n} = ${a*n}点\n次の1回 = ${(a+d)*(n+1)} − ${a*n} = ${x}点`,'点');});}},
+  {id:'wasa-age',unit:'wasa',level:1,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const k=pick([2,3,4]), y=ri(6,13), t=ri(2,14), x=k*(y+t)-t; if(x-y<20||x>46) return null;
+      return num(`今、母は${x}才、子は${y}才です。母の年れいが子の年れいの${k}倍になるのは、今から何年後ですか。`,t,String(t),
+        `年れいの差は、いつまでも ${x} − ${y} = ${x-y}才。\n${k}倍になるとき、差は子の年れいの ${k-1}倍にあたる。そのときの子の年れい = ${x-y} ÷ ${k-1} = ${y+t}才\n今から ${y+t} − ${y} = ${t}年後`,'年後');});}},
+  {id:'wasa-kajo',unit:'wasa',level:2,fn(r){const {ri,until}=G(r);
+    return until(()=>{const a=ri(3,8), b=a+ri(1,3), p=ri(2,9), q=ri(1,8), people=(p+q)/(b-a); if(!Number.isInteger(people)||people<4||people>40) return null;
+      const cnt=a*people+p, askP=r()<.6;
+      return num(`子どもたちにあめを配ります。1人に${a}個ずつ配ると${p}個あまり、1人に${b}個ずつ配ると${q}個たりません。${askP?'子どもは何人いますか。':'あめは全部で何個ありますか。'}`,askP?people:cnt,String(askP?people:cnt),
+        `1人に配る数を ${b-a}個ふやすと、必要なあめが ${p} + ${q} = ${p+q}個ふえる（あまりがなくなり、たりない分が出る）。\n人数 = ${p+q} ÷ ${b-a} = ${people}人`+(askP?'':`\nあめ = ${a} × ${people} + ${p} = ${cnt}個`),askP?'人':'個');});}},
+  {id:'wasa-coin',unit:'wasa',level:2,fn(r){const {ri,pick}=G(r);
+    const [lo,hi]=pick([[10,50],[10,100],[50,100]]), N=ri(10,30), k=ri(3,N-3), S=lo*(N-k)+hi*k;
+    return num(`${lo}円玉と${hi}円玉が合わせて${N}枚あり、合計金額は${S}円です。${hi}円玉は何枚ありますか。`,k,String(k),
+      `全部が${lo}円玉だとすると ${lo} × ${N} = ${lo*N}円。実際との差は ${S} − ${lo*N} = ${S-lo*N}円。\n${lo}円玉を${hi}円玉にかえるごとに ${hi-lo}円ふえるので、${hi}円玉は ${S-lo*N} ÷ ${hi-lo} = ${k}枚（つるかめ算）`,'枚');}},
+  {id:'wasa-imo',unit:'wasa',level:3,fn(r){const {ri,pick}=G(r);
+    if(r()<.5){
+      const A=ri(10,40),B=ri(10,40),C=ri(10,40), P=A+B, Q=B+C, R=C+A;
+      return num(`3つのみかん A、B、C があります。AとBの重さの和は${P}g、BとCの重さの和は${Q}g、CとAの重さの和は${R}gです。Aの重さは何gですか。`,A,String(A),
+        `3つの式を全部たすと、A・B・Cが2つずつになる：${P} + ${Q} + ${R} = ${P+Q+R}。だから A + B + C = ${(P+Q+R)/2}g\nAの重さ = (A + B + C) − (B + C) = ${(P+Q+R)/2} − ${Q} = ${A}g`,'g');}
+    const pp=pick([40,50,60,80,90,100,120,150]), nn=pick([60,80,100,120,140,160,180,200]), a=ri(2,4), b1=ri(2,4), b2=b1+ri(2,3), P1=a*pp+b1*nn, P2=a*pp+b2*nn, askNote=r()<.5;
+    return num(`ペン${a}本とノート${b1}冊で${P1}円、ペン${a}本とノート${b2}冊で${P2}円です。${askNote?'ノート':'ペン'}1${askNote?'冊':'本'}は何円ですか。`,askNote?nn:pp,String(askNote?nn:pp),
+      `ペンの本数が同じなので、代金のちがいは、ノートの冊数のちがいによる。\nノート1冊 = (${P2} − ${P1}) ÷ (${b2} − ${b1}) = ${nn}円`+(askNote?'':`\nペン${a}本 = ${P1} − ${nn} × ${b1} = ${a*pp}円なので、ペン1本 = ${a*pp} ÷ ${a} = ${pp}円`),'円');}},
+
+  /* ===== 場合の数 ===== */
+  {id:'count-match',unit:'count',level:1,fn(r){const {ri}=G(r); const n=ri(4,12);
+    if(r()<.6) return num(`${n}チームが、どのチームとも1回ずつ対戦する総当たり戦をします。試合は全部で何試合ですか。`,n*(n-1)/2,String(n*(n-1)/2),
+      `1つのチームは ${n-1}試合。${n}チームでは ${n} × ${n-1} = ${n*(n-1)}だが、同じ試合を2回ずつ数えているので2でわる。\n${n} × ${n-1} ÷ 2 = ${n*(n-1)/2}試合`,'試合');
+    const m=ri(6,20); return num(`${m}チームでトーナメント戦（負けたら脱落）をします。優勝が決まるまでに、試合は全部で何試合ですか。`,m-1,String(m-1),
+      `1試合ごとに、1チームが脱落する。優勝する1チーム以外の ${m} − 1 = ${m-1}チームが脱落するので、${m-1}試合`,'試合');}},
+  {id:'count-perm',unit:'count',level:1,fn(r){const {ri,pick}=G(r); const n=ri(4,7), k=ri(2,3), mode=pick(['line','pick','choose']);
+    const f=m=>{let o=1; for(let i=2;i<=m;i++) o*=i; return o;};
+    if(mode==='line') return num(`${n}人が、1列に並びます。並び方は全部で何通りありますか。`,f(n),String(f(n)),`${Array.from({length:n},(_,i)=>n-i).join(' × ')} = ${f(n)}通り`,'通り');
+    const perm=f(n)/f(n-k), comb=perm/f(k);
+    if(mode==='pick') return num(`${n}人の中から${k}人を選んで、1列に並べます。並べ方は全部で何通りありますか。`,perm,String(perm),`${Array.from({length:k},(_,i)=>n-i).join(' × ')} = ${perm}通り`,'通り');
+    return num(`${n}人の中から、${k}人の代表を選びます。選び方は全部で何通りありますか。`,comb,String(comb),`選んで並べる ${perm}通りのうち、同じ顔ぶれを ${f(k)}通りずつ数えているので、${perm} ÷ ${f(k)} = ${comb}通り`,'通り');}},
+  {id:'count-num',unit:'count',level:2,fn(r){const {ri}=G(r); const m=ri(4,7), withZero=r()<.6, dg=r()<.5?2:3;
+    const cards=Array.from({length:m},(_,i)=>i+(withZero?0:1)).join('、'), pos=['百','十','一'].slice(3-dg);
+    const first=withZero?m-1:m, rest=[]; for(let i=1;i<dg;i++) rest.push(m-i);
+    const ans=first*rest.reduce((a,b)=>a*b,1);
+    const why=pos.map((p,i)=>`${p}の位は、${i===0?(withZero?`0以外の ${first}通り`:`${first}通り`):`残りの ${rest[i-1]}通り${withZero&&i===1?'（0も使える）':''}`}`).join('。');
+    return num(`${cards}の数字が書かれたカードが、1枚ずつあります。この中から${dg}枚を選んで並べ、${dg}けたの整数をつくります。整数は全部で何個できますか。`,ans,String(ans),`${why}。\n${[first,...rest].join(' × ')} = ${ans}個`,'個');}},
+  {id:'count-dice',unit:'count',level:2,fn(r){const {ri}=G(r); const ge=r()<.4, S=ge?ri(7,11):ri(4,10); let c=0; const list=[];
+    for(let a=1;a<=6;a++){ let k=0; for(let b=1;b<=6;b++) if(ge?a+b>=S:a+b===S){ c++; k++; if(!ge) list.push(`(${a},${b})`); } if(ge) list.push(`大が${a}のとき${k}通り`); }
+    return num(`大小2つのさいころを同時に投げます。目の和が${S}${ge?'以上':''}になる目の出方は、全部で何通りありますか。`,c,String(c),`大きいさいころの目を順に調べる：${list.join(ge?'、':' ')}\n全部で ${c}通り`,'通り');}},
+  {id:'count-sq',unit:'count',level:3,fn(r){const {ri}=G(r); const a=ri(3,6), b=ri(a,8); let tot=0; const parts=[];
+    for(let k=1;k<=a;k++){ const c=(a-k+1)*(b-k+1); tot+=c; parts.push(`1辺が${k}マスの正方形：${a-k+1} × ${b-k+1} = ${c}個`); }
+    return num(`たて${a}マス、横${b}マスの、正方形のマスが並んだ図形があります。この図形の中にできる、大小さまざまな正方形は、全部で何個ですか。`,tot,String(tot),`大きさ別に数える。\n${parts.join('\n')}\n合計 ${tot}個`,'個');}},
+
+  /* ===== 規則性・数列 ===== */
+  {id:'rule-arith',unit:'rule',level:1,fn(r){const {ri}=G(r); const a=ri(2,9), d=ri(2,7), n=ri(15,50), v=a+(n-1)*d;
+    return num(`次のように、数が決まりにしたがって並んでいます。\n${a}、${a+d}、${a+2*d}、${a+3*d}、…\n前から${n}番目の数はいくつですか。`,v,String(v),`となりあう数の差は ${d}。${n}番目は、はじめの数 ${a} に ${d} を (${n} − 1)回たした数。\n${a} + ${d} × ${n-1} = ${v}`);}},
+  {id:'rule-sum',unit:'rule',level:2,fn(r){const {ri}=G(r); const f=ri(1,8), d=ri(1,5), n=ri(8,20), last=f+(n-1)*d, s=(f+last)*n/2;
+    return num(`${f}、${f+d}、${f+2*d}、…と、${d}ずつふえる数を、${n}個たします。答えを求めなさい。`,s,String(s),`最後の数は ${f} + ${d} × ${n-1} = ${last}。\n(はじめ + 終わり) × 個数 ÷ 2 = (${f} + ${last}) × ${n} ÷ 2 = ${s}`);}},
+  {id:'rule-cycle',unit:'rule',level:2,fn(r){const {ri,pick}=G(r);
+    const pat=pick([['赤','赤','青','白'],['赤','青','白'],['白','白','黒','赤','赤']]), target=pick(['赤','青','白','黒'].filter(x=>pat.includes(x)));
+    const L=pat.length, N=ri(30,90), full=Math.floor(N/L), rem=N%L, per=pat.filter(x=>x===target).length, extra=pat.slice(0,rem).filter(x=>x===target).length, ans=full*per+extra;
+    return num(`${pat.join('、')}の順に、ご石を${L}個ずつくり返して並べます。はじめから${N}個目までの中に、${target}のご石は何個ありますか。`,ans,String(ans),
+      `${L}個で1組。${N} ÷ ${L} = ${full}あまり${rem}。\n1組に${target}が${per}個あるので ${per} × ${full} = ${per*full}個。あまりの${rem}個（${pat.slice(0,rem).join('、')||'なし'}）に${target}が${extra}個。\n合計 ${ans}個`,'個');}},
+  {id:'rule-group',unit:'rule',level:3,fn(r){const {ri,pick}=G(r); const v=pick(['pos','sum','first']);
+    if(v==='pos'){ const N=ri(20,90); let k=1,c=0; while(c+k<N){ c+=k; k++; }
+      return num(`次のように、整数が小さい順に、その整数と同じ個数ずつ並んでいます。\n1、2、2、3、3、3、4、4、4、4、5、…\n前から${N}番目の数はいくつですか。`,k,String(k),
+        `1が1個、2が2個、…と並ぶので、${k-1}までの個数は 1 + 2 + … + ${k-1} = ${c}個。\n${N}番目は、${c+1}番目から ${c+k}番目の間にあるので、${k}です。`); }
+    if(v==='sum'){ const n=ri(4,8);
+      return num(`奇数を小さい順に、第1群は1個、第2群は2個、第3群は3個、…と区切ります。\n(1)、(3、5)、(7、9、11)、(13、15、17、19)、…\n第${n}群の数を、すべてたすと、いくつですか。`,n**3,String(n**3),
+        `第${n}群の最初の数は ${n*(n-1)+1}、最後の数は ${n*n+n-1}、個数は${n}個。\n(${n*(n-1)+1} + ${n*n+n-1}) × ${n} ÷ 2 = ${n**3}\n（第n群の和は、n × n × n になる）`); }
+    const n=ri(6,12), idx=n*(n-1)/2+1, ans=idx*2-1;
+    return num(`奇数を小さい順に、第1群は1個、第2群は2個、第3群は3個、…と区切ります。\n(1)、(3、5)、(7、9、11)、(13、15、17、19)、…\n第${n}群の最初の数はいくつですか。`,ans,String(ans),
+      `第${n-1}群までの個数は 1 + 2 + … + ${n-1} = ${n*(n-1)/2}個。\n第${n}群の最初は、奇数の ${idx}番目。奇数の○番目は ○ × 2 − 1 なので、${idx} × 2 − 1 = ${ans}`); }},
+
+  /* ===== 立体図形（体積・水の深さ・回転体） ===== */
+  {id:'solid-vol',unit:'solid',level:1,fn(r){const {ri}=G(r); const a=ri(3,12),b=ri(3,12),c=ri(2,10);
+    if(r()<.5) return num(`たて${a}cm、横${b}cm、高さ${c}cmの直方体の体積は何cm³ですか。`,a*b*c,String(a*b*c),`体積 = たて × 横 × 高さ = ${a} × ${b} × ${c} = ${a*b*c}cm³`,'cm³');
+    const s=2*(a*b+b*c+c*a); return num(`たて${a}cm、横${b}cm、高さ${c}cmの直方体の表面積は何cm²ですか。`,s,String(s),
+      `向かい合う面は同じ大きさ。(たて×横 + 横×高さ + 高さ×たて) × 2\n(${a}×${b} + ${b}×${c} + ${c}×${a}) × 2 = ${s}cm²`,'cm²');}},
+  {id:'solid-water',unit:'solid',level:2,fn(r){const {ri,pick}=G(r); const a=pick([10,12,15,20,25,30]), b=pick([10,12,15,20,24,30]), rise=ri(1,6), vol=a*b*rise;
+    return num(`たて${a}cm、横${b}cmの直方体の水そうに、水が入っています。この水そうに、体積${vol}cm³の石を、完全にしずめると、水面は何cm上がりますか。（水はこぼれないものとします）`,rise,String(rise),
+      `石の体積と同じだけ、水の体積がふえる。ふえた水の体積は ${vol}cm³、水そうの底面積は ${a} × ${b} = ${a*b}cm²。\n上がる高さ = ${vol} ÷ ${a*b} = ${rise}cm`,'cm');}},
+  {id:'solid-cyl',unit:'solid',level:2,fn(r){const {ri}=G(r); const rad=ri(2,8), h=ri(3,12), base=Math.round(314*rad*rad)/100, v=Math.round(314*rad*rad*h)/100;
+    return num(`半径${rad}cm、高さ${h}cmの円柱の体積は何cm³ですか。（円周率は3.14とします）`,v,fmt2(v),`底面積 = ${rad} × ${rad} × 3.14 = ${fmt2(base)}cm²\n体積 = 底面積 × 高さ = ${fmt2(base)} × ${h} = ${fmt2(v)}cm³`,'cm³');}},
+  {id:'solid-rot',unit:'solid',level:3,fn(r){const {ri,until}=G(r);
+    return until(()=>{const a=ri(3,12), b=ri(3,9); if((b*b*a)%3) return null; const k=b*b*a/3, v=Math.round(314*k)/100;
+      return num(`直角をはさむ2辺の長さが${a}cmと${b}cmの直角三角形があります。${a}cmの辺を軸にして1回転させてできる立体の体積は何cm³ですか。（円周率は3.14とします。円すいの体積 = 底面積 × 高さ ÷ 3）`,v,fmt2(v),
+        `できる立体は、底面の半径が${b}cm、高さが${a}cmの円すい。\n体積 = ${b} × ${b} × 3.14 × ${a} ÷ 3 = ${k} × 3.14 = ${fmt2(v)}cm³`,'cm³');});}},
+
+  /* ===== 平面図形の面積 ===== */
+  {id:'area-tri',unit:'area',level:1,fn(r){const {ri,until}=G(r);
+    if(r()<.5) return until(()=>{const b=ri(4,20),h=ri(3,16); if((b*h)%2) return null; return num(`底辺${b}cm、高さ${h}cmの三角形の面積は何cm²ですか。`,b*h/2,String(b*h/2),`三角形の面積 = 底辺 × 高さ ÷ 2 = ${b} × ${h} ÷ 2 = ${b*h/2}cm²`,'cm²');});
+    return until(()=>{const u=ri(3,12),d=ri(u+2,18),h=ri(3,12); if(((u+d)*h)%2) return null; const s=(u+d)*h/2; return num(`上底${u}cm、下底${d}cm、高さ${h}cmの台形の面積は何cm²ですか。`,s,String(s),`台形の面積 = (上底 + 下底) × 高さ ÷ 2 = (${u} + ${d}) × ${h} ÷ 2 = ${s}cm²`,'cm²');});}},
+  {id:'area-ht',unit:'area',level:2,fn(r){const {ri,until}=G(r);
+    return until(()=>{const p=ri(1,5), q=ri(1,5); if(p===q||gcd(p,q)!==1) return null; const u=ri(2,9), S=(p+q)*u, askAbd=r()<.5, ans=(askAbd?p:q)*u;
+      return num(`三角形ABCの辺BC上に点Dがあり、BD：DC = ${p}：${q}です。三角形ABCの面積が${S}cm²のとき、三角形${askAbd?'ABD':'ADC'}の面積は何cm²ですか。`,ans,String(ans),
+        `三角形ABDとADCは、高さ（Aから辺BCまでの垂線）が同じなので、面積の比は、底辺の比 BD：DC と等しい。\nABD：ADC = ${p}：${q}。全体の比 ${p} + ${q} = ${p+q} が ${S}cm² なので、1あたり ${S} ÷ ${p+q} = ${u}cm²。\n三角形${askAbd?'ABD':'ADC'} = ${u} × ${askAbd?p:q} = ${ans}cm²`,'cm²');});}},
+  {id:'area-comp',unit:'area',level:2,fn(r){const {ri}=G(r); const a=ri(8,20), b=ri(8,20), c=ri(3,a-3), d=ri(3,b-3), s=a*b-c*d;
+    return num(`たて${a}cm、横${b}cmの長方形から、たて${c}cm、横${d}cmの長方形を切り取った図形があります。残った図形の面積は何cm²ですか。`,s,String(s),`もとの長方形 ${a} × ${b} = ${a*b}cm² から、切り取った ${c} × ${d} = ${c*d}cm² をひく。\n${a*b} − ${c*d} = ${s}cm²`,'cm²');}},
+  {id:'area-sector',unit:'area',level:3,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const th=pick([90,60,120,45,180,30,270]), rad=ri(2,12); if((314*rad*rad*th)%360) return null; const v=(314*rad*rad*th/360)/100;
+      return num(`半径${rad}cm、中心角${th}度のおうぎ形の面積は何cm²ですか。（円周率は3.14とします）`,v,fmt2(v),`おうぎ形の面積 = 半径 × 半径 × 3.14 × 中心角 ÷ 360\n= ${rad} × ${rad} × 3.14 × ${th} ÷ 360 = ${fmt2(v)}cm²`,'cm²');});}},
 ];
 
 /* ---------- 知識問題（choiceは最初の選択肢が正解。表示時にシャッフル） ---------- */
@@ -487,6 +598,13 @@ function itemFromSpec(sp){
   return makeItem(src,unit,level,[],seed);
 }
 const specOf=it=>[it.ref,it.unit,it.level,it.seed];
+/* 問題の組み合わせ（設計図の並び）の短い照合値。結果が、どの問題に対する答えかを確かめる。
+ * 問題が作り直されたあとに、古いリンクで解いた答えが、別の問題として採点されるのを防ぐ */
+function specHash(specs){
+  let h=5381; const s=JSON.stringify(specs);
+  for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0;
+  return h.toString(36);
+}
 /* 問題集・生成器の内容が変わったら変わる値。ポータルと子ども用ページのバージョンが合っているか確かめる */
 const CODE_VER=1;
 function qv(){
@@ -512,7 +630,7 @@ function inputHtml(it,dis){
   return `<input data-ans="${it.uid}" value="${esc(it.user)}" placeholder="${ph}" size="22" ${dis}> ${esc(it.suffix||'')}`;
 }
 
-window.QC={UNITS,SUBJ_ORDER,SUBJ_KEY,WEAK_UNIT_MAP,unitOf,rngFrom,GENS,BANK,allBank,isCorrect,parseNum,makeItem,itemFromSpec,specOf,qv,SVG,stars,nl2br,inputHtml,esc};
+window.QC={UNITS,SUBJ_ORDER,SUBJ_KEY,WEAK_UNIT_MAP,unitOf,rngFrom,GENS,BANK,allBank,isCorrect,parseNum,makeItem,itemFromSpec,specOf,specHash,qv,SVG,stars,nl2br,inputHtml,esc};
 })();
 </script>
 <script>/* 子ども用ページ：保護者から届いたリンクの中身（問題の設計図）から、問題を作り直して解く。
@@ -567,7 +685,7 @@ async function postText(text){
   }catch(e){ return false; }
 }
 function codeFor(t,sv){
-  return 'JK1.'+b64u(JSON.stringify({id:t.id,a:sv.a.map(x=>x==null?'':String(x)),t:sv.gradedAt||'',s:(payload&&payload.s)||''}));
+  return 'JK1.'+b64u(JSON.stringify({id:t.id,a:sv.a.map(x=>x==null?'':String(x)),t:sv.gradedAt||'',s:(payload&&payload.s)||'',h:QC.specHash(t.items)}));
 }
 let flushing=false;
 /* 採点ずみで、まだ送れていない回を送る。何回呼んでも、送れた回は二重に送らない */
