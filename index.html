@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>毎日のテスト</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1d2330; --sub:#5d6678; --line:#e3e6ec;
+  --accent:#2747a0; --on-accent:#ffffff; --accent-soft:#e8edf9;
+  --good:#1f8a5b; --warn:#a86500; --bad:#c23b3b; --scrim:rgba(20,23,29,.45);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171d; --panel:#1d222b; --ink:#e7eaf0; --sub:#9aa3b5; --line:#2e3542;
+    --accent:#8fa8ff; --on-accent:#10162a; --accent-soft:#25304a;
+    --good:#4cc38a; --warn:#f0a940; --bad:#f07070; --scrim:rgba(0,0,0,.6); color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;font-size:17px;line-height:1.65}
+header{background:var(--accent);color:var(--on-accent);padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px;text-align:center}
+header h1{margin:0;font-size:19px;font-weight:600}
+main{max-width:720px;margin:0 auto;padding:16px 16px calc(32px + env(safe-area-inset-bottom,0px))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.card h2{font-size:17px;margin:0 0 6px}
+.ttl{font-size:19px;margin:12px 0}
+.card.ok{border-left:4px solid var(--good)} .card.ng{border-left:4px solid var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .between{justify-content:space-between}
+.center{text-align:center}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.tag.good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.tag.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.muted{color:var(--sub);font-size:13px}
+.foot{text-align:center;margin-top:20px}
+.q{margin:8px 0;font-size:18px}
+.fig{margin:6px 0;color:var(--ink)}
+.res{margin-top:10px;padding:10px;border-radius:8px;background:var(--bg)}
+.okc{color:var(--good);font-size:18px} .ngc{color:var(--bad);font-size:18px}
+input[type=text],input:not([type]),textarea{font:inherit;font-size:17px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-width:100%}
+textarea.code{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;word-break:break-all;margin:8px 0}
+label{display:block;padding:4px 0}
+input[type=radio]{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+.btn{font:inherit;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:8px;padding:8px 18px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.big{padding:12px 36px;font-size:18px}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#ask{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+#ask[hidden]{display:none}
+#ask .card{max-width:380px;width:100%;margin:0}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:8px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><h1>毎日のテスト</h1></header>
+<main id="main"><div class="card"><p>読み込んでいます…</p></div></main>
+<div id="ask" hidden role="dialog" aria-modal="true"><div class="card"><p id="askMsg" style="margin:0 0 12px"></p>
+  <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="askNo">やめる</button><button class="btn" id="askOk">採点する</button></div></div></div>
+<div id="toast" hidden role="status"></div>
+<script>/* 追加の知識問題（新しいテスト結果に合わせて追記していく問題集）
+ * 書式:
+ *   選択式: {id:'x1', unit:'body', level:1, type:'choice', q:'問題文', choices:['正解','誤り1','誤り2','誤り3'], explain:'解説'}
+ *   記述式: {id:'x2', unit:'kokugo', level:2, type:'text', q:'問題文', accept:['正解','別解'], explain:'解説'}
+ *   数値式: {id:'x3', unit:'weather', level:3, type:'num', q:'問題文', ans:78.4, explain:'解説', suffix:'度'}
+ * unit: calc / speed / ratio / simil / angle / number / kokugo / heat / lever / body / weather / history / geo
+ * choices は最初が正解（表示時にシャッフルされる）。id は既存と重複させないこと。
+ */
+window.EXTRA_BANK = [
+];
+</script>
+<script>/* 週末テスト：弱点対策ドリル
+ * - 算数・理科計算は数値を変えて毎回自動生成（generators）
+ * - 知識問題は問題集（BANK + extra-questions.js の EXTRA_BANK）から出題
+ * - 出題配分は「弱点の状況・過去の正誤・最新テストの誤答・教科偏差値」で毎週再計算
+ */
+(function(){
+'use strict';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- 単元 ---------- */
+const UNITS = {
+  calc:{name:'計算',subj:'算数'}, speed:{name:'速さ',subj:'算数'}, ratio:{name:'割合と比',subj:'算数'},
+  simil:{name:'図形と比（相似）',subj:'算数'}, angle:{name:'角度・多角形',subj:'算数'}, number:{name:'数の性質',subj:'算数'},
+  kokugo:{name:'ことわざ・漢字',subj:'国語'},
+  heat:{name:'熱量',subj:'理科'}, lever:{name:'てこ',subj:'理科'}, body:{name:'人体・生物',subj:'理科'}, weather:{name:'気象・天体',subj:'理科'},
+  history:{name:'歴史（縄文〜平安）',subj:'社会'}, geo:{name:'地理',subj:'社会'},
+};
+const SUBJ_ORDER = ['算数','国語','理科','社会'];
+const SUBJ_KEY = {'算数':'math','国語':'jpn','理科':'sci','社会':'soc'};
+const WEAK_UNIT_MAP = {1:['calc'],2:['speed'],3:['ratio','simil'],4:['angle'],5:['heat'],6:['lever'],7:['body'],8:['history'],9:['kokugo'],10:[]};
+const UNIT_RULES = [
+  ['speed',/速さ|旅人|流水|時計|通過|ダイヤグラム/],['simil',/相似|図形と比|辺の比|面積比/],
+  ['ratio',/割合|比|相当|損益|売買|濃さ|食塩水|平均/],['angle',/角|多角形/],['number',/約数|倍数|数の性質|既約|数に関する|規則/],['calc',/計算/],
+  ['heat',/熱|あたたま|温度/],['lever',/てこ|滑車|輪軸|力の|ばね/],
+  ['weather',/気象|天気|前線|台風|月|太陽|天体|星|雲/],['body',/消化|人体|生物|光合成|植物|動物|昆虫|食物|栄養|アゲハ|つり合い/],
+  ['history',/時代|歴史|天皇|古墳|遺跡|貝塚|律令|土偶|妹子|太子|政治|文化|外交/],['geo',/地理|県|国土|農|工業|漁業|地名|島|川|気候|海岸|都市/],
+  ['kokugo',/漢字|ことわざ|慣用句|熟語|語/],
+];
+function unitOf(subj,text){
+  for(const [u,re] of UNIT_RULES){ if(UNITS[u].subj===subj && re.test(text||'')) return u; }
+  return null;
+}
+
+/* ---------- 乱数・分数 ---------- */
+function rngFrom(seed){ let a=seed>>>0; return ()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}; }
+const gcd=(a,b)=>{a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b];}return a;};
+const lcm=(a,b)=>a/gcd(a,b)*b;
+const F=(n,d=1)=>{ if(d<0){n=-n;d=-d;} const g=gcd(n,d)||1; return {n:n/g,d:d/g}; };
+const fadd=(a,b)=>F(a.n*b.d+b.n*a.d,a.d*b.d), fsub=(a,b)=>F(a.n*b.d-b.n*a.d,a.d*b.d);
+const fmul=(a,b)=>F(a.n*b.n,a.d*b.d), fdiv=(a,b)=>F(a.n*b.d,a.d*b.n);
+const fval=a=>a.n/a.d;
+function fstr(a){ if(a.d===1) return String(a.n); const w=Math.floor(a.n/a.d), r=a.n-w*a.d; return w?`${w}と${r}/${a.d}`:`${a.n}/${a.d}`; }
+const imp=a=>a.d===1?String(a.n):`${a.n}/${a.d}`;
+
+/* ---------- 問題ジェネレーター（数値を変えて毎回新しい問題） ---------- */
+function G(r){
+  const ri=(a,b)=>a+Math.floor(r()*(b-a+1));
+  const pick=arr=>arr[Math.floor(r()*arr.length)];
+  const until=(make)=>{for(let i=0;i<200;i++){const v=make(); if(v) return v;} throw new Error('gen failed');};
+  return {ri,pick,until};
+}
+const num=(text,ans,ansText,explain,suffix)=>({type:'num',text,ans,ansText:ansText??String(ans),explain,suffix});
+
+const GENS = [
+  /* 計算 */
+  {id:'calc-frac',unit:'calc',level:1,fn(r){const {ri,pick,until}=G(r);
+    const ds=[2,3,4,5,6,8,9,10,12];
+    let A,C,plus;
+    until(()=>{const b=pick(ds),d=pick(ds); A=fadd(F(ri(1,b-1),b),F(ri(0,2))); C=F(ri(1,d-1),d);
+      return A.d!==C.d && fval(A)!==fval(C);});
+    plus=r()<.5;
+    if(!plus && fval(A)<fval(C)) [A,C]=[C,A];
+    const R=plus?fadd(A,C):fsub(A,C), L=lcm(A.d,C.d), op=plus?'+':'−';
+    const na=A.n*L/A.d, nc=C.n*L/C.d;
+    return num(`${fstr(A)} ${op} ${fstr(C)} を計算しなさい。`,fval(R),fstr(R),
+      `帯分数は仮分数に直し、分母を${L}にそろえる（通分）。\n${imp(A)} ${op} ${imp(C)} = ${na}/${L} ${op} ${nc}/${L} = ${plus?na+nc:na-nc}/${L} = ${fstr(R)}`);}},
+  {id:'calc-kufu',unit:'calc',level:1,fn(r){const {ri,pick}=G(r);
+    const [k,k100]=pick([['3.14',314],['2.5',250],['1.7',170],['0.48',48]]), total=pick([10,20,100]);
+    const a=ri(2,total-2), b=total-a, ans=k100*total/100;
+    return num(`${k} × ${a} + ${k} × ${b} を工夫して計算しなさい。`,ans,String(ans),
+      `同じ数 ${k} でまとめる（分配法則）。\n${k} × (${a} + ${b}) = ${k} × ${total} = ${ans}`);}},
+  {id:'calc-dec',unit:'calc',level:2,fn(r){const {ri,pick}=G(r);
+    const [ds,v1]=pick([['0.25',F(1,4)],['0.75',F(3,4)],['0.5',F(1,2)],['0.2',F(1,5)],['0.4',F(2,5)],['0.6',F(3,5)],['0.125',F(1,8)],['1.25',F(5,4)],['1.5',F(3,2)]]);
+    const d=pick([3,6,9,12,8]), v2=F(ri(1,d-1),d), v3=F(ri(1,9),ri(2,9));
+    const s1=fadd(v1,v2), R=fdiv(s1,v3);
+    return num(`(${ds} + ${fstr(v2)}) ÷ ${imp(v3)} を計算しなさい。`,fval(R),fstr(R),
+      `小数は分数に直す：${ds} = ${imp(v1)}\nかっこの中：${imp(v1)} + ${imp(v2)} = ${fstr(s1)}\nわり算は逆数をかける：${imp(s1)} × ${v3.d}/${v3.n} = ${fstr(R)}`);}},
+  {id:'calc-box-int',unit:'calc',level:2,fn(r){const {ri}=G(r);
+    const x=ri(3,30), a=ri(1,x-1), b=ri(2,9), c=ri(1,40), d=(x-a)*b+c;
+    return num(`(□ − ${a}) × ${b} + ${c} = ${d}　□にあてはまる数を答えなさい。`,x,String(x),
+      `最後に計算したものから順にもどす（逆算）。\n${d} − ${c} = ${d-c}\n${d-c} ÷ ${b} = ${x-a}\n${x-a} + ${a} = ${x}`);}},
+  {id:'calc-box-frac',unit:'calc',level:3,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{
+      const x=F(ri(1,11),pick([2,3,4,5,6])), p=F(ri(1,5),pick([2,3,4,5,6,7])), q=F(ri(1,5),pick([2,3,4,6]));
+      const R=fsub(fmul(x,p),q); if(fval(R)<=0) return null; const t=fadd(R,q);
+      return num(`□ × ${imp(p)} − ${imp(q)} = ${fstr(R)}　□にあてはまる数を答えなさい。`,fval(x),fstr(x),
+        `逆算する。\n${fstr(R)} + ${fstr(q)} = ${fstr(t)}\n${fstr(t)} ÷ ${imp(p)} = ${imp(t)} × ${p.d}/${p.n} = ${fstr(x)}`);});}},
+
+  /* 速さ */
+  {id:'speed-basic',unit:'speed',level:1,fn(r){const {ri,pick,until}=G(r); const v=ri(0,2);
+    if(v===0) return until(()=>{const a=pick([3,4,5,6,9,12,15,18,36,45,54,60,72]), b=pick([10,15,20,30,40,45,50]);
+      if((a*b*1000)%60) return null; const ans=a*b*1000/60;
+      return num(`時速${a}kmで${b}分間進むと、何m進みますか。`,ans,String(ans),
+        `${b}分 = ${b}/60時間。道のり = 速さ × 時間\n${a} × ${b}/60 = ${fstr(F(a*b,60))}km = ${ans}m（1km = 1000m）`,'m');});
+    if(v===1){const sp=pick([50,60,70,75,80,120,150,200,250]), t=ri(5,30), D=sp*t;
+      return num(`分速${sp}mで${D}m進むのに何分かかりますか。`,t,String(t),`時間 = 道のり ÷ 速さ\n${D} ÷ ${sp} = ${t}分`,'分');}
+    const s=pick([5,10,15,20,25]), ans=s*36/10;
+    return num(`秒速${s}mは、時速何kmですか。`,ans,String(ans),`秒速${s}m → 分速 ${s}×60 = ${s*60}m → 時速 ${s*60}×60 = ${s*3600}m = ${ans}km`,'km');}},
+  {id:'speed-meet',unit:'speed',level:2,fn(r){const {ri,pick,until}=G(r);
+    if(r()<.5){const v1=pick([40,50,60,70,80,90]), v2=pick([50,60,70,80,100,120]), t=ri(5,20), D=(v1+v2)*t;
+      return num(`${D}mはなれたところにいる姉と妹が、向かい合って同時に歩き始めました。姉は分速${v2}m、妹は分速${v1}mです。2人は何分後に出会いますか。`,t,String(t),
+        `2人の間の道のりは、1分間に ${v2} + ${v1} = ${v1+v2}m ずつ縮まる。\n${D} ÷ ${v1+v2} = ${t}分後`,'分');}
+    return until(()=>{const v1=pick([50,60,70,80]), diff=pick([10,20,30,40,50]), v2=v1+diff, t0=ri(3,15);
+      if((v1*t0)%diff) return null; const c=v1*t0/diff; if(c>40) return null;
+      return num(`妹が分速${v1}mで家を出発し、その${t0}分後に姉が分速${v2}mで同じ道を追いかけました。姉は出発してから何分後に妹に追いつきますか。`,c,String(c),
+        `姉が出発したとき、妹は ${v1} × ${t0} = ${v1*t0}m 先にいる。\n1分間に ${v2} − ${v1} = ${diff}m ずつ近づくので、${v1*t0} ÷ ${diff} = ${c}分後`,'分');});}},
+  {id:'speed-stream',unit:'speed',level:2,fn(r){const {ri,until}=G(r);
+    if(r()<.4){const s=ri(8,15), rv=ri(1,4), up=s-rv, T=ri(2,5), D=up*T;
+      return num(`静水での速さが時速${s}kmの船が、流れの速さが時速${rv}kmの川を${D}kmさかのぼります（上ります）。何時間かかりますか。`,T,String(T),
+        `上りの速さ = 静水での速さ − 流れの速さ = ${s} − ${rv} = ${up}km/時\n${D} ÷ ${up} = ${T}時間`,'時間');}
+    return until(()=>{const u=ri(6,14), rv=ri(1,4), d=u+2*rv, D=lcm(u,d)*ri(1,2); if(D>150) return null;
+      const T1=D/u, T2=D/d, askRiver=r()<.5;
+      return num(`ある船が、川ぞいの${D}kmはなれた2地点を往復しました。上りに${T1}時間、下りに${T2}時間かかりました。${askRiver?'川の流れの速さ':'静水での船の速さ'}は時速何kmですか。`,
+        askRiver?rv:u+rv,String(askRiver?rv:u+rv),
+        `上りの速さ ${D} ÷ ${T1} = ${u}km/時、下りの速さ ${D} ÷ ${T2} = ${d}km/時\n`+
+        (askRiver?`流れの速さ = (下り − 上り) ÷ 2 = (${d} − ${u}) ÷ 2 = ${rv}`:`静水での速さ = (下り + 上り) ÷ 2 = (${d} + ${u}) ÷ 2 = ${u+rv}`),'km');});}},
+  {id:'speed-clock',unit:'speed',level:3,fn(r){const {ri}=G(r);
+    if(r()<.5){const h=ri(1,11), m=2*ri(1,29), a=Math.abs(30*h-5.5*m), ang=Math.min(a,360-a);
+      return num(`${h}時${m}分のとき、時計の長針と短針がつくる角のうち、小さいほうの角度は何度ですか。`,ang,String(ang),
+        `長針は1分に6度、短針は1分に0.5度進むので、1分に5.5度ずつ差が変わる。\n${h}時ちょうどの角度は 30 × ${h} = ${30*h}度。\n${m}分間で 5.5 × ${m} = ${5.5*m}度 変わるので、|${30*h} − ${5.5*m}| = ${a}度。`+
+        (a>180?`\n180度をこえるので 360 − ${a} = ${ang}度`:''),'度');}
+    const h=ri(1,10), m=F(60*h,11);
+    return num(`${h}時と${h+1}時の間で、長針と短針がぴったり重なるのは${h}時何分ですか（帯分数で答えてよい）。`,fval(m),fstr(m),
+      `${h}時ちょうどに、長針は短針の ${30*h}度 うしろにいる。\n1分に 6 − 0.5 = 5.5度 ずつ追いつくので、${30*h} ÷ 5.5 = ${30*h} × 2/11 = ${fstr(m)}分`,'分');}},
+  {id:'speed-tsurukame',unit:'speed',level:3,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const a=pick([50,60,70,80]), b=pick([120,140,150,160,180,200]), x=ri(3,15), y=ri(3,15), D=a*x+b*y, T=x+y;
+      return num(`家から${D}mはなれた駅まで、はじめは分速${a}mで歩き、途中から分速${b}mで走ったところ、全部で${T}分かかりました。歩いた時間は何分ですか。`,x,String(x),
+        `全部 ${T}分 走ったとすると ${b} × ${T} = ${b*T}m。実際との差は ${b*T} − ${D} = ${b*T-D}m。\n走る1分を歩く1分にかえるごとに ${b} − ${a} = ${b-a}m ずつ減るので、${b*T-D} ÷ ${b-a} = ${x}分（速さのつるかめ算）`,'分');});}},
+
+  /* 割合と比 */
+  {id:'ratio-simplify',unit:'ratio',level:1,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{
+      if(r()<.5){const p=ri(1,9), q=ri(1,9); if(p===q||gcd(p,q)!==1) return null; const k=pick([1,2,3,4,5]);
+        const x=p*k/10, y=q*k/10;
+        return {type:'ratio',text:`${x} : ${y} を、もっとも簡単な整数の比で答えなさい。（例 2:3）`,ans:[p,q],ansText:`${p}:${q}`,
+          explain:`両方を10倍すると ${p*k}:${q*k}。最大公約数 ${k} でわって ${p}:${q}`};}
+      const b=ri(2,9), d=ri(2,9), a=ri(1,b-1), c=ri(1,d-1); if(gcd(a,b)!==1||gcd(c,d)!==1||b===d) return null;
+      const L=lcm(b,d), x=a*L/b, y=c*L/d, g=gcd(x,y);
+      return {type:'ratio',text:`${a}/${b} : ${c}/${d} を、もっとも簡単な整数の比で答えなさい。（例 2:3）`,ans:[x/g,y/g],ansText:`${x/g}:${y/g}`,
+        explain:`両方に分母の最小公倍数 ${L} をかける → ${x}:${y}`+(g>1?`。${g}でわって ${x/g}:${y/g}`:'')};});}},
+  {id:'ratio-split',unit:'ratio',level:1,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const p=ri(1,9), q=ri(1,9); if(p===q||gcd(p,q)!==1) return null; const u=pick([20,30,40,50,60,80,100,120,150]), N=(p+q)*u;
+      return num(`${N}円を姉と妹で ${p}:${q} に分けます。姉は何円もらえますか。`,p*u,String(p*u),
+        `全体を ${p} + ${q} = ${p+q} とみる。1にあたるのは ${N} ÷ ${p+q} = ${u}円。\n姉は ${u} × ${p} = ${p*u}円`,'円');});}},
+  {id:'ratio-renhi',unit:'ratio',level:2,fn(r){const {ri,until}=G(r);
+    return until(()=>{const a=ri(1,9),b=ri(2,9),c=ri(2,9),d=ri(1,9); if(b===c||gcd(a,b)!==1||gcd(c,d)!==1) return null;
+      const L=lcm(b,c), A=a*L/b, C=d*L/c, g=gcd(gcd(A,L),C);
+      return {type:'ratio',text:`A:B = ${a}:${b}、B:C = ${c}:${d} のとき、A:B:C をもっとも簡単な整数の比で答えなさい。（例 2:3:4）`,
+        ans:[A/g,L/g,C/g],ansText:`${A/g}:${L/g}:${C/g}`,
+        explain:`共通するBを ${b} と ${c} の最小公倍数 ${L} にそろえる。\nA:B = ${A}:${L}、B:C = ${L}:${C} → A:B:C = ${A}:${L}:${C}`+(g>1?` → ${A/g}:${L/g}:${C/g}`:'')};});}},
+  {id:'ratio-soutou',unit:'ratio',level:2,fn(r){const {pick}=G(r);
+    const [p1,q1]=pick([[1,3],[2,5],[1,4],[3,8],[2,3],[1,5]]), [p2,q2]=pick([[1,2],[1,3],[2,3],[1,4],[3,4],[2,5]]);
+    const X=q1*q2*pick([10,20,30,40,50]), Y=X*(q1-p1)/q1, R=Y*(q2-p2)/q2;
+    return num(`はじめに持っていたお金の${p1}/${q1}を使い、次に残りの${p2}/${q2}を使ったところ、${R}円残りました。はじめに持っていたお金は何円ですか。`,X,String(X),
+      `うしろから考える（相当算）。\n2回目は残りの${p2}/${q2}を使ったので、残りの ${q2-p2}/${q2} が ${R}円 → 1回目のあとの残りは ${R} ÷ ${q2-p2}/${q2} = ${Y}円\nそれは、はじめの ${q1-p1}/${q1} にあたるので ${Y} ÷ ${q1-p1}/${q1} = ${X}円`,'円');}},
+  {id:'ratio-baibai',unit:'ratio',level:3,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const C=pick([500,800,1000,1200,1500,2000,2500,3000]), a=ri(2,5), b=ri(1,4); if((10+a)*(10-b)<=100) return null;
+      const P=C*(10+a)/10, S=P*(10-b)/10, pr=S-C;
+      return num(`原価${C}円の品物に、原価の${a}割の利益を見込んで定価をつけました。売れなかったので、定価の${b}割引きで売りました。利益は何円ですか。`,pr,String(pr),
+        `定価 = ${C} × (1 + 0.${a}) = ${P}円\n売り値 = ${P} × (1 − 0.${b}) = ${S}円\n利益 = ${S} − ${C} = ${pr}円`,'円');});}},
+
+  /* 図形と比 */
+  {id:'simil-pyramid',unit:'simil',level:1,fn(r){const {ri}=G(r);
+    const a=ri(2,6), b=ri(1,6), m=ri(1,3), DE=a*m, BC=(a+b)*m;
+    return {...num(`図で、DEとBCは平行です。AD=${a}cm、DB=${b}cm、DE=${DE}cm のとき、BCは何cmですか。`,BC,String(BC),
+      `三角形ADEと三角形ABCは相似（ピラミッド型）。\n相似比は AD:AB = ${a}:${a+b}\nBC = ${DE} × ${a+b}/${a} = ${BC}cm`,'cm'),svg:'pyramid'};}},
+  {id:'simil-hourglass',unit:'simil',level:2,fn(r){const {ri,until}=G(r);
+    return until(()=>{const p=ri(2,9), q=ri(2,9); if(p===q) return null; const m=ri(1,3), L=(p+q)*m;
+      return {...num(`図で、ABとCDは平行で、ADとBCは点Oで交わっています。AB=${p}cm、CD=${q}cm、AD=${L}cm のとき、AOは何cmですか。`,p*m,String(p*m),
+        `三角形OABと三角形ODCは相似（砂時計型）。\nAO:OD = AB:DC = ${p}:${q}\nAO = ${L} × ${p}/${p+q} = ${p*m}cm`,'cm'),svg:'hourglass'};});}},
+  {id:'simil-area',unit:'simil',level:3,fn(r){const {ri}=G(r);
+    const a=ri(1,4), b=ri(1,4), m=ri(1,6), S=a*a*m, big=m*(a+b)**2, ans=big-S;
+    return {...num(`図で、DEとBCは平行で、AD:DB=${a}:${b}です。三角形ADEの面積が${S}cm²のとき、四角形DBCEの面積は何cm²ですか。`,ans,String(ans),
+      `相似比 AD:AB = ${a}:${a+b} → 面積比は ${a}×${a}:${a+b}×${a+b} = ${a*a}:${(a+b)**2}\n三角形ABC = ${S} ÷ ${a*a} × ${(a+b)**2} = ${big}cm²\n四角形DBCE = ${big} − ${S} = ${ans}cm²`,'cm²'),svg:'pyramid'};}},
+
+  /* 角度・多角形 */
+  {id:'angle-regular',unit:'angle',level:1,fn(r){const {pick}=G(r);
+    const n=pick([5,6,8,9,10,12,15,18,20]);
+    if(r()<.5) return num(`正${n}角形の1つの内角は何度ですか。`,180*(n-2)/n,String(180*(n-2)/n),
+      `内角の和は 180 × (${n} − 2) = ${180*(n-2)}度。\n正多角形なので ${180*(n-2)} ÷ ${n} = ${180*(n-2)/n}度\n（外角 360 ÷ ${n} = ${360/n}度 を180度から引いてもよい）`,'度');
+    return num(`正${n}角形の1つの外角は何度ですか。`,360/n,String(360/n),`多角形の外角の和はいつも360度。\n360 ÷ ${n} = ${360/n}度`,'度');}},
+  {id:'angle-sum',unit:'angle',level:2,fn(r){const {ri,pick}=G(r); const v=ri(0,2);
+    if(v===0){const x=pick([20,24,30,36,40,45,60,72]);
+      return num(`1つの外角が${x}度の正多角形は、正何角形ですか。`,360/x,String(360/x),`外角の和は360度なので、360 ÷ ${x} = ${360/x} → 正${360/x}角形`,'角形');}
+    if(v===1){const n=ri(5,12); return num(`${n}角形の内角の和は何度ですか。`,180*(n-2),String(180*(n-2)),`1つの頂点から対角線を引くと、三角形が ${n} − 2 = ${n-2}個できる。\n180 × ${n-2} = ${180*(n-2)}度`,'度');}
+    const x=pick([108,120,135,140,144,150,156,160,162]), n=360/(180-x);
+    return num(`1つの内角が${x}度の正多角形は、正何角形ですか。`,n,String(n),`1つの外角は 180 − ${x} = ${180-x}度。\n360 ÷ ${180-x} = ${n} → 正${n}角形`,'角形');}},
+  {id:'angle-diag',unit:'angle',level:3,fn(r){const {ri}=G(r); const n=ri(5,14), dg=n*(n-3)/2;
+    if(r()<.5) return num(`${n}角形の対角線は全部で何本ありますか。`,dg,String(dg),
+      `1つの頂点からは、自分ととなりの2つをのぞいた ${n} − 3 = ${n-3}本 引ける。\n${n} × ${n-3} = ${n*(n-3)} は同じ線を2回数えているので ÷2 → ${dg}本`,'本');
+    const S=180*(n-2);
+    return num(`内角の和が${S}度の多角形の対角線は全部で何本ありますか。`,dg,String(dg),
+      `${S} ÷ 180 = ${n-2} → ${n-2} + 2 = ${n}角形。\n対角線は ${n} × (${n} − 3) ÷ 2 = ${dg}本`,'本');}},
+
+  /* 数の性質 */
+  {id:'number-div',unit:'number',level:1,fn(r){const {pick}=G(r);
+    const N=pick([12,18,20,24,28,30,36,40,45,48,60,72,84,90,96,100]);
+    const divs=[]; for(let i=1;i<=N;i++) if(N%i===0) divs.push(i);
+    const fac={}; let m=N; for(let p=2;p<=m;p++) while(m%p===0){fac[p]=(fac[p]||0)+1;m/=p;}
+    const fs=Object.entries(fac).map(([p,e])=>e>1?`${p}^${e}`:p).join(' × '), es=Object.values(fac).map(e=>`(${e}+1)`).join(' × ');
+    return num(`${N}の約数は全部で何個ありますか。`,divs.length,String(divs.length),
+      `${N} = ${fs.replace(/\^(\d)/g,'の$1乗')}\n約数の個数は ${es} = ${divs.length}個\n（${divs.join('、')}）`,'個');}},
+  {id:'number-gcd',unit:'number',level:2,fn(r){const {ri,pick,until}=G(r);
+    if(r()<.35){const N=pick([12,15,18,20,21,24,30]); const ks=[]; for(let k=1;k<N;k++) if(gcd(k,N)===1) ks.push(k);
+      return num(`分母が${N}で、1より小さい分数のうち、それ以上約分できない分数は何個ありますか。`,ks.length,String(ks.length),
+        `分子が1〜${N-1}のうち、${N}と1以外の公約数をもたない数を数える。\n${ks.map(k=>k+'/'+N).join('、')} の${ks.length}個`,'個');}
+    return until(()=>{const g=pick([2,3,4,5,6,7,8,9,12]), x=ri(2,9), y=ri(2,9); if(x===y||gcd(x,y)!==1) return null;
+      const A=g*x, B=g*y, askL=r()<.5;
+      return num(`${A}と${B}の${askL?'最小公倍数':'最大公約数'}を求めなさい。`,askL?g*x*y:g,String(askL?g*x*y:g),
+        `${A} = ${g} × ${x}、${B} = ${g} × ${y}\n最大公約数は ${g}`+(askL?`、最小公倍数は ${g} × ${x} × ${y} = ${g*x*y}`:''));});}},
+  {id:'number-ie',unit:'number',level:3,fn(r){const {pick,until}=G(r);
+    return until(()=>{const a=pick([2,3,4,5,6,7]), b=pick([3,4,5,6,7,8]); if(a>=b) return null; const N=pick([50,60,100,120,150,200]), L=lcm(a,b);
+      const fa=Math.floor(N/a), fb=Math.floor(N/b), fl=Math.floor(N/L), ans=N-fa-fb+fl;
+      return num(`1から${N}までの整数のうち、${a}でも${b}でも割り切れない数は何個ありますか。`,ans,String(ans),
+        `${a}の倍数 ${fa}個、${b}の倍数 ${fb}個、両方の倍数（${L}の倍数）${fl}個。\n${a}か${b}で割り切れる数は ${fa} + ${fb} − ${fl} = ${fa+fb-fl}個\n割り切れない数は ${N} − ${fa+fb-fl} = ${ans}個`,'個');});}},
+
+  /* 理科：熱量 */
+  {id:'heat-cal',unit:'heat',level:1,fn(r){const {ri,pick}=G(r); const w=pick([50,100,150,200,250,300]), t1=ri(10,30), dt=ri(10,50);
+    if(r()<.5) return num(`${w}gの水の温度を${t1}℃から${t1+dt}℃に上げるのに必要な熱量は何カロリーですか。`,w*dt,String(w*dt),
+      `1gの水を1℃上げる熱量が1カロリー。\n熱量 = 水の重さ × 上がった温度 = ${w} × (${t1+dt} − ${t1}) = ${w*dt}カロリー`,'カロリー');
+    return num(`${t1}℃の水${w}gに${w*dt}カロリーの熱をあたえると、水の温度は何℃になりますか。`,t1+dt,String(t1+dt),
+      `上がる温度 = 熱量 ÷ 水の重さ = ${w*dt} ÷ ${w} = ${dt}℃\n${t1} + ${dt} = ${t1+dt}℃`,'℃');}},
+  {id:'heat-mix',unit:'heat',level:2,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const w1=pick([50,100,150,200,300]), w2=pick([50,100,150,200,300]), t1=ri(10,30), t2=ri(50,90), s=w1*t1+w2*t2;
+      if(s%(w1+w2)) return null; const T=s/(w1+w2);
+      return num(`${t1}℃の水${w1}gと${t2}℃の水${w2}gを混ぜると、何℃になりますか。（熱は外へにげないものとします）`,T,String(T),
+        `「重さ × 温度」の合計を全体の重さでわる。\n(${w1}×${t1} + ${w2}×${t2}) ÷ (${w1}+${w2}) = ${s} ÷ ${w1+w2} = ${T}℃\n（高い水が失った熱 = 低い水が得た熱 で考えても同じ）`,'℃');});}},
+  {id:'heat-mass',unit:'heat',level:3,fn(r){const {ri,pick,until}=G(r);
+    return until(()=>{const w2=pick([100,150,200,300]), t2=ri(60,90), t1=ri(10,30), T=ri(t1+5,t2-5), num_=w2*(t2-T);
+      if(num_%(T-t1)) return null; const x=num_/(T-t1); if(x>600) return null;
+      return num(`${t2}℃の水${w2}gに、${t1}℃の水を何gか混ぜたところ${T}℃になりました。${t1}℃の水を何g混ぜましたか。`,x,String(x),
+        `高い水が失った熱 = 低い水が得た熱\n${w2} × (${t2} − ${T}) = □ × (${T} − ${t1})\n${num_} = □ × ${T-t1} → □ = ${x}g`,'g');});}},
+
+  /* 理科：てこ */
+  {id:'lever-basic',unit:'lever',level:1,fn(r){const {pick,until}=G(r);
+    return until(()=>{const a=pick([10,15,20,30,40]), b=pick([10,15,20,25,30,40,60]), w=pick([20,30,40,50,60,80,100,120]);
+      if(a===b||(w*a)%b) return null; const x=w*a/b;
+      return num(`棒の重さは考えないものとします。支点から左に${a}cmのところに${w}gのおもりをつるしました。支点から右に${b}cmのところに何gのおもりをつるすとつり合いますか。`,x,String(x),
+        `てこのつり合い：左の（重さ × 支点からのきょり）= 右の（重さ × 支点からのきょり）\n${w} × ${a} = ${w*a}、${w*a} ÷ ${b} = ${x}g`,'g');});}},
+  {id:'lever-two',unit:'lever',level:2,fn(r){const {pick,until}=G(r);
+    return until(()=>{const a1=pick([10,20,30]), a2=pick([40,50,60]), w1=pick([20,30,40,50]), w2=pick([10,20,30]), b=pick([20,25,30,40,50]);
+      const m=w1*a1+w2*a2; if(m%b) return null; const x=m/b, spring=r()<.5;
+      return num(`棒の重さは考えないものとします。支点から左に${a1}cmのところに${w1}g、左に${a2}cmのところに${w2}gのおもりをつるしました。支点から右に${b}cmのところにおもりをつるしてつり合わせるとき、`+
+        (spring?`支点を上からばねばかりでつるしているとすると、ばねばかりは何gを示しますか。`:`右には何gのおもりが必要ですか。`),spring?w1+w2+x:x,String(spring?w1+w2+x:x),
+        `左回りのはたらき ${w1}×${a1} + ${w2}×${a2} = ${m}\n右のおもり = ${m} ÷ ${b} = ${x}g`+(spring?`\n支点（ばねばかり）には、すべてのおもりの重さがかかる：${w1} + ${w2} + ${x} = ${w1+w2+x}g`:''),'g');});}},
+  {id:'lever-rod',unit:'lever',level:3,fn(r){const {pick,until}=G(r);
+    return until(()=>{const L=pick([60,80,100,120]), W=pick([40,60,80,100,120]), p=pick([5,10,15,20,25,30,40]); if(p>=L/2) return null;
+      const m=W*(L/2-p); if(m%p) return null; const x=m/p;
+      return num(`長さ${L}cm、重さ${W}gの太さが一様な棒があります。左はしから${p}cmのところを支点にして、左はしにおもりをつるして棒を水平につり合わせるには、何gのおもりが必要ですか。`,x,String(x),
+        `太さが一様な棒の重さは、まん中（左はしから${L/2}cm）にかかると考える。\n支点からまん中までは ${L/2} − ${p} = ${L/2-p}cm\n${W} × ${L/2-p} = □ × ${p} → □ = ${x}g`,'g');});}},
+];
+
+/* ---------- 知識問題（choiceは最初の選択肢が正解。表示時にシャッフル） ---------- */
+const C=(id,unit,level,q,choices,explain)=>({id,unit,level,type:'choice',q,choices,explain});
+const TX=(id,unit,level,q,accept,explain,suffix)=>({id,unit,level,type:'text',q,accept,explain,suffix});
+const N1=(id,unit,level,q,ans,explain,suffix)=>({id,unit,level,type:'num',q,ans,explain,suffix});
+const BANK = [
+  /* 人体・生物 */
+  C('b1','body',1,'だ液にふくまれ、デンプンを分解する消化酵素はどれですか。',['アミラーゼ','ペプシン','リパーゼ','トリプシン'],'だ液のアミラーゼはデンプンを麦芽糖などに分解する。ペプシンは胃液にふくまれ、タンパク質を分解する。'),
+  C('b2','body',1,'胃液にふくまれ、タンパク質を分解する消化酵素はどれですか。',['ペプシン','アミラーゼ','リパーゼ','マルターゼ'],'胃液のペプシンはタンパク質を分解する。'),
+  C('b3','body',1,'胆汁（たんじゅう）をつくる器官はどれですか。',['かん臓','たんのう','すい臓','胃'],'胆汁はかん臓でつくられ、たんのうにたくわえられる。消化酵素はふくまないが、脂肪の消化を助ける。'),
+  C('b4','body',1,'食べ物が通る順として正しいものはどれですか。',['口→食道→胃→小腸→大腸→こう門','口→胃→食道→小腸→大腸→こう門','口→食道→胃→大腸→小腸→こう門','口→食道→小腸→胃→大腸→こう門'],'口→食道→胃→小腸→大腸→こう門。かん臓・すい臓・たんのうは食べ物が通らない器官。'),
+  C('b5','body',1,'消化された養分を主に吸収する器官（内側に柔毛がある）はどれですか。',['小腸','大腸','胃','食道'],'小腸の内側の柔毛で養分を吸収する。大腸は主に水分を吸収する。'),
+  C('b6','body',2,'吸収されたブドウ糖の一部を、グリコーゲンに変えてたくわえる器官はどれですか。',['かん臓','すい臓','じん臓','小腸'],'かん臓はブドウ糖をグリコーゲンとしてたくわえるほか、胆汁をつくる、有害なものを分解するなどのはたらきがある。'),
+  C('b7','body',2,'デンプン・タンパク質・脂肪のすべてを分解する消化液はどれですか。',['すい液','だ液','胃液','胆汁'],'すい液にはデンプン・タンパク質・脂肪を分解する消化酵素がふくまれる。'),
+  C('b8','body',2,'タンパク質が最終的に分解されてできるものはどれですか。',['アミノ酸','ブドウ糖','脂肪酸','麦芽糖'],'デンプン→ブドウ糖、タンパク質→アミノ酸、脂肪→脂肪酸とモノグリセリド。'),
+  C('b9','body',2,'だ液のはたらきを調べる実験で、試験管をあたためる湯の温度としてもっとも適切なものはどれですか。',['約40℃','約5℃','約70℃','約100℃'],'消化酵素は体温に近い温度でよくはたらく。高温にするとはたらかなくなる。'),
+  C('b10','body',1,'ヨウ素液はデンプンがあると何色に変わりますか。',['青むらさき色','赤色','黄色','緑色'],'ヨウ素液（もとはうすい茶色）はデンプンがあると青むらさき色になる。'),
+  C('b11','body',2,'光合成の材料として正しい組み合わせはどれですか。',['二酸化炭素と水','酸素と水','二酸化炭素と酸素','ちっ素と水'],'光合成は、光のエネルギーで二酸化炭素と水からデンプンをつくり、酸素を出すはたらき。'),
+  C('b12','body',1,'光合成で植物から出される気体はどれですか。',['酸素','二酸化炭素','ちっ素','水素'],'光合成では酸素が出される。呼吸では二酸化炭素が出される。'),
+  C('b13','body',1,'アゲハ（ナミアゲハ）はどのすがたで冬をこしますか。',['さなぎ','卵','幼虫','成虫'],'アゲハはさなぎで冬ごし。カマキリは卵、テントウムシは成虫で冬をこす。'),
+  C('b14','body',2,'オオカマキリはどのすがたで冬をこしますか。',['卵','幼虫','さなぎ','成虫'],'カマキリは「卵のう」の中の卵で冬をこす。'),
+  C('b15','body',2,'ナナホシテントウはどのすがたで冬をこしますか。',['成虫','卵','幼虫','さなぎ'],'テントウムシは成虫が集まって冬をこす。'),
+  C('b16','body',2,'食べる・食べられるの関係で、一般にもっとも数（量）が多いのはどれですか。',['植物（生産者）','草食動物','小型の肉食動物','大型の肉食動物'],'食べられる側ほど数が多く、ピラミッドの形になる。'),
+  C('b17','body',3,'食物連鎖で、草食動物が急に減ったとき、その直後に起こることとして正しいものはどれですか。',['植物が増え、肉食動物は減る','植物も肉食動物も増える','植物が減り、肉食動物が増える','植物も肉食動物も減る'],'草食動物に食べられる植物は増え、草食動物を食べる肉食動物はえさが減るので減る。'),
+  C('b18','body',2,'落ち葉や死がいを分解する「分解者」の例はどれですか。',['カビやキノコのなかま','バッタ','カエル','イネ'],'菌類（カビ・キノコ）や細菌類が分解者。'),
+  C('b19','body',3,'だ液のはたらきを調べるとき、だ液の代わりに水を入れた試験管も用意するのはなぜですか。',['変化がだ液のはたらきによるものだと確かめるため','温度を一定にするため','デンプンをとかしやすくするため','ヨウ素液の色をこくするため'],'条件を1つだけ変えて比べる「対照実験」。「なぜその手順か」は入試でよく問われる。'),
+
+  /* 気象・天体 */
+  C('w1','weather',1,'寒冷前線が通過したあとの変化として正しいものはどれですか。',['気温が下がり、北よりの風に変わる','気温が上がり、南よりの風に変わる','気温は変わらず、雨が長く続く','気温が上がり、晴れが続く'],'寒冷前線では積乱雲ができて短時間に強い雨。通過後は気温が下がり、風は北よりになる。'),
+  C('w2','weather',1,'6月ごろ日本付近に停滞し、長雨をもたらす前線はどれですか。',['梅雨前線','寒冷前線','温暖前線','閉そく前線'],'梅雨前線（停滞前線）。秋にできるものは秋雨前線。'),
+  C('w3','weather',2,'台風の地表付近の風のふき方として正しいものはどれですか。',['中心に向かって反時計回りにふきこむ','中心に向かって時計回りにふきこむ','中心から時計回りにふき出す','中心から反時計回りにふき出す'],'台風は熱帯低気圧。北半球の低気圧では、風が反時計回りに中心へふきこむ。'),
+  C('w4','weather',1,'冬の日本付近の代表的な気圧配置はどれですか。',['西高東低','東高西低','南高北低','北高南低'],'西（大陸）に高気圧、東（太平洋）に低気圧。北西の季節風がふく。'),
+  C('w5','weather',2,'冬の気象衛星の雲画像の特徴として正しいものはどれですか。',['日本海にすじ状の雲が並ぶ','日本列島に沿って東西に長い雲の帯がある','太平洋に大きなうずまき状の雲がある','日本付近にほとんど雲がない'],'冬はすじ状の雲。東西に長い帯は梅雨前線、うずまきは台風。'),
+  C('w6','weather',2,'明け方（午前6時ごろ）に南の空に見える月はどれですか。',['下弦の月','上弦の月','満月','三日月'],'上弦の月は夕方（午後6時ごろ）、満月は真夜中（午前0時ごろ）、下弦の月は明け方に南中する。'),
+  C('w7','weather',1,'満月が南中するのは何時ごろですか。',['午前0時ごろ','午前6時ごろ','正午ごろ','午後6時ごろ'],'満月は太陽と反対側にあるので、真夜中に南中する。'),
+  N1('w8','weather',3,'北緯35度の地点で、夏至の日の太陽の南中高度は何度ですか（地軸のかたむきは23.4度とします）。',78.4,'夏至の南中高度 = 90 − 緯度 + 23.4 = 90 − 35 + 23.4 = 78.4度','度'),
+  N1('w9','weather',3,'北緯35度の地点で、冬至の日の太陽の南中高度は何度ですか（地軸のかたむきは23.4度とします）。',31.6,'冬至の南中高度 = 90 − 緯度 − 23.4 = 90 − 35 − 23.4 = 31.6度','度'),
+  C('w10','weather',2,'温暖前線が近づくときの雨の特徴として正しいものはどれですか。',['広い範囲におだやかな雨が長時間ふる','せまい範囲にはげしい雨が短時間ふる','雨はふらず強い風だけがふく','ひょうがふることが多い'],'温暖前線は乱層雲などができ、広い範囲に長い雨。寒冷前線は積乱雲で短時間のはげしい雨。'),
+  C('w11','weather',2,'夏の日本の天気に大きく影響する気団はどれですか。',['小笠原気団','シベリア気団','オホーツク海気団','揚子江気団'],'夏は南の小笠原気団（太平洋高気圧）でむし暑い。冬はシベリア気団。'),
+
+  /* 歴史 */
+  C('h1','history',1,'縄文時代の人々が貝がらや食べ物のごみを捨てた場所のあとを何といいますか。',['貝塚','古墳','環濠集落','高床倉庫'],'貝塚から当時の食生活がわかる。'),
+  C('h2','history',1,'東京都の大森貝塚を発見したアメリカ人はだれですか。',['モース','ナウマン','ザビエル','ペリー'],'1877年にモースが発見。'),
+  C('h3','history',1,'土偶が主につくられた時代はどれですか。',['縄文時代','弥生時代','古墳時代','飛鳥時代'],'土偶は縄文時代、はにわは古墳時代。混同しやすいので注意。'),
+  C('h4','history',1,'古墳のまわりに並べられた素焼きの土製品はどれですか。',['はにわ','土偶','銅たく','石包丁'],'はにわは古墳時代。銅たくと石包丁は弥生時代。'),
+  C('h5','history',1,'稲作が広まり、高床倉庫がつくられるようになった時代はどれですか。',['弥生時代','縄文時代','古墳時代','奈良時代'],'弥生時代に稲作が広まり、米をたくわえる高床倉庫がつくられた。'),
+  C('h6','history',1,'静岡県にある弥生時代の代表的な遺跡はどれですか。',['登呂遺跡','三内丸山遺跡','岩宿遺跡','吉野ヶ里遺跡'],'登呂遺跡（静岡）。三内丸山は縄文（青森）、岩宿は旧石器（群馬）、吉野ヶ里は弥生（佐賀）。'),
+  C('h7','history',2,'邪馬台国の卑弥呼について書かれている中国の歴史書はどれですか。',['魏志倭人伝','漢書地理志','後漢書東夷伝','宋書倭国伝'],'魏志倭人伝。漢書地理志は「倭は100あまりの国」、後漢書東夷伝は金印、宋書倭国伝は倭王武。'),
+  C('h8','history',2,'大阪府堺市にある日本最大の古墳（大仙古墳）の形はどれですか。',['前方後円墳','円墳','方墳','前方後方墳'],'前方後円墳。仁徳天皇の墓と伝えられる。'),
+  C('h9','history',1,'607年に遣隋使として送られた人物はだれですか。',['小野妹子','中臣鎌足','蘇我入鹿','阿倍仲麻呂'],'聖徳太子が小野妹子を隋に送った。'),
+  C('h10','history',2,'聖徳太子が役人の心構えを示した決まりはどれですか。',['十七条の憲法','冠位十二階','大宝律令','墾田永年私財法'],'十七条の憲法（604年）。冠位十二階（603年）は能力で役人を取り立てる制度。'),
+  C('h11','history',2,'645年、中大兄皇子と中臣鎌足が蘇我氏をたおして始めた政治改革はどれですか。',['大化の改新','壬申の乱','承久の乱','建武の新政'],'大化の改新。土地と人民を国のものにする公地公民をめざした。'),
+  C('h12','history',3,'672年の壬申の乱に勝って即位した天皇はだれですか。',['天武天皇','天智天皇','聖武天皇','桓武天皇'],'大海人皇子が勝って天武天皇となった。天智天皇は中大兄皇子。'),
+  C('h13','history',2,'701年に完成した、律と令からなる法律はどれですか。',['大宝律令','十七条の憲法','御成敗式目','武家諸法度'],'大宝律令。御成敗式目は鎌倉時代、武家諸法度は江戸時代。'),
+  C('h14','history',1,'710年に奈良につくられた都はどれですか。',['平城京','平安京','藤原京','長岡京'],'平城京（710年）。平安京は794年。'),
+  C('h15','history',2,'東大寺に大仏をつくり、国ごとに国分寺を建てさせた天皇はだれですか。',['聖武天皇','天武天皇','桓武天皇','推古天皇'],'聖武天皇は仏教の力で国を守ろうとした。'),
+  C('h16','history',2,'何度も失敗しながら来日し、唐招提寺を開いた中国の僧はだれですか。',['鑑真','行基','空海','最澄'],'鑑真。行基は大仏づくりに協力した日本の僧。'),
+  C('h17','history',3,'743年に出された、新しく開墾した土地の永久私有を認める法はどれですか。',['墾田永年私財法','班田収授法','三世一身法','大宝律令'],'墾田永年私財法により、のちの荘園が生まれるきっかけになった。'),
+  C('h18','history',1,'794年に平安京へ都を移した天皇はだれですか。',['桓武天皇','聖武天皇','天智天皇','白河天皇'],'桓武天皇。'),
+  C('h19','history',2,'空海が開いた宗派と寺の組み合わせとして正しいものはどれですか。',['真言宗・金剛峯寺','天台宗・延暦寺','真言宗・延暦寺','天台宗・金剛峯寺'],'空海＝真言宗・金剛峯寺（高野山）、最澄＝天台宗・延暦寺（比叡山）。'),
+  C('h20','history',2,'894年に遣唐使の停止を提案した人物はだれですか。',['菅原道真','藤原道長','小野妹子','平清盛'],'菅原道真。のちに大宰府へ流された。'),
+  C('h21','history',2,'「この世をば わが世とぞ思ふ…」の歌をよみ、摂関政治の全盛期を築いた人物はだれですか。',['藤原道長','藤原頼通','藤原鎌足','菅原道真'],'藤原道長。子の頼通が平等院鳳凰堂を建てた。'),
+  C('h22','history',2,'藤原頼通が宇治に建てた阿弥陀堂はどれですか。',['平等院鳳凰堂','中尊寺金色堂','法隆寺','東大寺'],'平等院鳳凰堂（京都府宇治市）。中尊寺金色堂は奥州藤原氏（岩手県）。'),
+  C('h23','history',2,'1086年、天皇の位をゆずったあとも上皇として政治を行った（院政を始めた）人物はだれですか。',['白河上皇','後鳥羽上皇','桓武天皇','聖武天皇'],'白河上皇が院政を始めた。'),
+  C('h24','history',2,'武士として初めて太政大臣になった人物はだれですか。',['平清盛','源頼朝','平将門','藤原純友'],'平清盛（1167年）。'),
+  C('h25','history',3,'平清盛が日宋貿易のために整備した港（現在の神戸市）はどれですか。',['大輪田泊','博多','堺','長崎'],'大輪田泊（おおわだのとまり）。'),
+  C('h26','history',3,'10世紀に関東で反乱を起こし、自らを「新皇」と名のった人物はだれですか。',['平将門','藤原純友','源義家','平清盛'],'平将門（関東）。同じころ藤原純友は瀬戸内海で反乱。'),
+  C('h27','history',3,'708年につくられた貨幣はどれですか。',['和同開珎','富本銭','永楽通宝','寛永通宝'],'和同開珎（708年）。富本銭はそれより前の天武天皇のころ。'),
+  C('h28','history',2,'天皇から防人・農民までの歌を集めた奈良時代の歌集はどれですか。',['万葉集','古今和歌集','古事記','日本書紀'],'万葉集。古今和歌集は平安時代。古事記・日本書紀は歴史書。'),
+
+  /* 地理 */
+  C('g1','geo',1,'島根県の県庁所在地はどこですか。',['松江市','鳥取市','松山市','高松市'],'松江（島根）・松山（愛媛）・高松（香川）は混同しやすい頻出問題。'),
+  C('g2','geo',1,'愛媛県の県庁所在地はどこですか。',['松山市','松江市','高松市','高知市'],'愛媛＝松山市。'),
+  C('g3','geo',1,'香川県の県庁所在地はどこですか。',['高松市','松山市','徳島市','松江市'],'香川＝高松市。'),
+  C('g4','geo',1,'宍道湖や出雲大社がある県はどこですか。',['島根県','鳥取県','岡山県','広島県'],'島根県。鳥取県には鳥取砂丘・境港・大山（伯耆富士）がある。'),
+  C('g5','geo',2,'境港や鳥取砂丘がある県はどこですか。',['鳥取県','島根県','山口県','兵庫県'],'鳥取県。'),
+  C('g6','geo',1,'オリーブの栽培で知られる香川県の島はどれですか。',['小豆島','淡路島','屋久島','佐渡島'],'小豆島（香川県）。淡路島は兵庫県。'),
+  C('g7','geo',1,'山口県にある、カルスト地形で有名な台地はどれですか。',['秋吉台','鳥取砂丘','シラス台地','根釧台地'],'秋吉台。地下には秋芳洞という鍾乳洞がある。'),
+  C('g8','geo',2,'愛媛県の宇和海沿岸で、リアス海岸を利用してさかんな養殖はどれですか。',['真珠・まだい','のり','ほたて貝','かき'],'宇和海では真珠やまだいの養殖がさかん。かきは広島県。'),
+  C('g9','geo',2,'岡山県倉敷市の水島地区で発達している工業はどれですか。',['石油化学工業','自動車工業','製紙業','印刷業'],'水島には石油化学コンビナートや製鉄所がある。'),
+  C('g10','geo',2,'瀬戸大橋が結ぶルートはどれですか。',['児島（岡山県）―坂出（香川県）','神戸―鳴門','尾道―今治','下関―北九州'],'本州四国連絡橋は3ルート：児島―坂出（瀬戸大橋）、神戸―鳴門（明石海峡大橋・大鳴門橋）、尾道―今治（しまなみ海道）。'),
+  C('g11','geo',2,'「しまなみ海道」が結ぶルートはどれですか。',['尾道（広島県）―今治（愛媛県）','児島―坂出','神戸―鳴門','宇野―高松'],'しまなみ海道は尾道―今治ルート。'),
+  C('g12','geo',3,'吉野川の早明浦ダムから水を引き、讃岐平野の水不足を補っている用水はどれですか。',['香川用水','愛知用水','豊川用水','明治用水'],'香川用水。讃岐平野は雨が少なく、ため池も多い。'),
+  C('g13','geo',2,'日本の最南端の島（東京都）はどれですか。',['沖ノ鳥島','南鳥島','与那国島','波照間島'],'最南端：沖ノ鳥島、最東端：南鳥島（どちらも東京都）、最西端：与那国島、最北端：択捉島。'),
+  C('g14','geo',2,'日本の最東端の島はどれですか。',['南鳥島','沖ノ鳥島','択捉島','与那国島'],'南鳥島（東京都）。'),
+  C('g15','geo',3,'フォッサマグナの西の端にあたる断層線はどれですか。',['糸魚川―静岡構造線','中央構造線','千島海溝','南海トラフ'],'フォッサマグナの西端は糸魚川―静岡構造線。中央構造線は西日本を南北に分ける断層。'),
+  C('g16','geo',2,'日本の世界自然遺産ではないものはどれですか。',['富士山','知床','白神山地','屋久島'],'富士山は世界文化遺産。自然遺産は知床・白神山地・小笠原諸島・屋久島・奄美大島/徳之島/沖縄島北部及び西表島。'),
+  C('g17','geo',2,'冬に北西の季節風の影響で雪が多い地域の気候はどれですか。',['日本海側の気候','太平洋側の気候','瀬戸内の気候','南西諸島の気候'],'北西の季節風が日本海で水分をふくみ、山地にぶつかって日本海側に雪をふらせる。'),
+  C('g18','geo',2,'瀬戸内の気候で一年中降水量が少ない理由はどれですか。',['中国山地と四国山地に季節風がさえぎられるから','海に囲まれているから','標高が高いから','暖流が流れているから'],'夏も冬も山地に季節風がさえぎられるため。'),
+  C('g19','geo',1,'米の生産量が全国でもっとも多い県はどこですか。',['新潟県','北海道','秋田県','山形県'],'1位新潟県、2位北海道。'),
+  C('g20','geo',3,'地方別に見ると、米の生産量がもっとも多いのはどこですか。',['東北地方','北海道地方','中部地方','関東地方'],'県別では新潟が1位だが、地方別で合計すると東北地方がもっとも多い。'),
+
+  /* ことわざ・漢字 */
+  TX('k1','kokugo',1,'□にあてはまる漢字（漢数字）を答えなさい：「石の上にも□年」',['三','3'],'「石の上にも三年」がまん強く続ければ、やがて成功する。'),
+  TX('k2','kokugo',1,'□にあてはまる漢字を答えなさい：「□の耳に念仏」',['馬','うま'],'いくら言い聞かせても効き目がないこと。'),
+  TX('k3','kokugo',1,'□にあてはまる漢字を答えなさい：「急がば□れ」',['回','まわ'],'急ぐときほど、遠回りでも安全確実な方法をとるほうがよい。'),
+  TX('k4','kokugo',1,'□にあてはまる漢字を答えなさい：「□も木から落ちる」',['猿','さる'],'その道の名人でも失敗することがある。'),
+  TX('k5','kokugo',1,'□にあてはまる漢字（漢数字）を答えなさい：「□聞は一見にしかず」',['百','100'],'何度も聞くより、一度実際に見るほうがよくわかる。'),
+  TX('k6','kokugo',2,'□にあてはまる漢字（漢数字）を答えなさい：「□階から目薬」',['二','2'],'思うようにいかず、もどかしいこと。効果がないこと。'),
+  TX('k7','kokugo',2,'□にあてはまる漢字を答えなさい（2つとも同じ字）：「二□を追う者は一□をも得ず」',['兎','うさぎ'],'同時に2つのことをしようとすると、どちらもうまくいかない。'),
+  TX('k8','kokugo',2,'□にあてはまる漢字（漢数字）を答えなさい：「仏の顔も□度まで」',['三','3'],'どんなにおだやかな人でも、何度もひどいことをされればおこる。'),
+  TX('k9','kokugo',2,'□にあてはまる漢字（漢数字）を答えなさい：「□里の道も一歩から」',['千','1000'],'大きなことも、身近な一歩から始まる。'),
+  C('k10','kokugo',3,'「情けは人のためならず」の意味として正しいものはどれですか。',['人に親切にすれば、めぐりめぐって自分に返ってくる','人に情けをかけると、その人のためにならない','情けは自分のためにかけるものではない','人に親切にしても意味がない'],'よくまちがえられる意味。「ためにならない」ではなく、「自分にかえってくる」。'),
+  TX('k11','kokugo',1,'「竹馬の友」の「竹馬」の読みをひらがなで答えなさい。',['ちくば'],'竹馬の友（ちくばのとも）＝幼なじみ。'),
+  TX('k12','kokugo',2,'「境内」の読みをひらがなで答えなさい。',['けいだい'],'神社や寺のしき地のこと。'),
+  TX('k13','kokugo',2,'「発端」の読みをひらがなで答えなさい。',['ほったん'],'物事の始まり。'),
+  TX('k14','kokugo',2,'「家路」の読みをひらがなで答えなさい。',['いえじ'],'家に帰る道。'),
+  TX('k15','kokugo',3,'「格子」の読みをひらがなで答えなさい。',['こうし'],'細い木などを縦横に組んだもの。'),
+  C('k16','kokugo',1,'「戦いをやめること」を表す「テイセン」の正しい漢字はどれですか。',['停戦','定戦','低戦','停線'],'「停」はとめる・とどまるの意味。停止・停車。'),
+  C('k17','kokugo',1,'「本をカりる」の「カ」の正しい漢字はどれですか。',['借','貸','仮','化'],'借りる（自分が受け取る）／貸す（人にわたす）。'),
+  C('k18','kokugo',2,'「アンケートにカイトウする」の「カイトウ」の正しい漢字はどれですか。',['回答','解答','会頭','快投'],'問いかけ・質問に答える＝回答。問題を解いて答える＝解答。'),
+  C('k19','kokugo',2,'「意見をデンタツする」の「デンタツ」の正しい漢字はどれですか。',['伝達','伝立','電達','伝建'],'伝達＝伝えとどけること。'),
+  C('k20','kokugo',2,'「みんなとキョウチョウして作業する」の「キョウチョウ」の正しい漢字はどれですか。',['協調','強調','共調','協長'],'協調＝力を合わせること。強調＝強く主張すること。'),
+];
+const allBank=()=>BANK.concat(Array.isArray(window.EXTRA_BANK)?window.EXTRA_BANK.filter(b=>b&&b.id&&UNITS[b.unit]):[]);
+
+/* ---------- 採点 ---------- */
+const toHalf=s=>String(s??'').replace(/[！-～]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/　/g,' ').replace(/[−－ー]/g,m=>m);
+const kata2hira=s=>s.replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+function parseNum(s){
+  s=toHalf(s).replace(/,/g,'').replace(/[^\d.\/と\s]/g,' ').trim().replace(/\s+/g,' ');
+  let m;
+  if((m=s.match(/^(\d+)\s*と\s*(\d+)\s*\/\s*(\d+)$/))||(m=s.match(/^(\d+) (\d+)\/(\d+)$/))) return +m[1]+m[2]/m[3];
+  if((m=s.match(/^(\d+)\s*\/\s*(\d+)$/))) return m[1]/m[2];
+  if(/^\d+(\.\d+)?$/.test(s)) return +s;
+  return NaN;
+}
+function parseRatio(s){
+  const p=toHalf(s).split(/[:：]/).map(x=>parseNum(x));
+  if(p.length<2||p.some(x=>isNaN(x)||!Number.isInteger(x)||x<=0)) return null;
+  const g=p.reduce((a,b)=>gcd(a,b)); return p.map(x=>x/g);
+}
+const normText=s=>kata2hira(toHalf(s).replace(/\s/g,''));
+function isCorrect(it,u){
+  if(u===''||u==null) return false;
+  if(it.type==='num'){const v=parseNum(u); return !isNaN(v)&&Math.abs(v-it.ans)<1e-6;}
+  if(it.type==='ratio'){const v=parseRatio(u); return !!v&&v.length===it.ans.length&&v.every((x,i)=>x===it.ans[i]);}
+  if(it.type==='text') return it.ans.map(normText).includes(normText(u));
+  if(it.type==='choice') return +u===it.ans;
+  return false;
+}
+
+
+/* ---------- 問題の作成 ---------- */
+function makeItem(src,unit,level,reasons,seed){
+  if(seed==null) seed=Math.floor(Math.random()*2147483647);
+  const r=rngFrom(seed);
+  const base={uid:Math.random().toString(36).slice(2,10),unit,level,reasons:reasons||[],user:'',ok:null,seed};
+  if(src.fn){ const g=src.fn(r); return {...base,src:'gen',ref:src.id,...g}; }
+  if(src.type==='choice'){
+    const order=src.choices.map((c,i)=>({c,i,k:r()})).sort((a,b)=>a.k-b.k);
+    return {...base,src:'bank',ref:src.id,type:'choice',text:src.q,choices:order.map(o=>o.c),ans:order.findIndex(o=>o.i===0),ansText:src.choices[0],explain:src.explain};
+  }
+  if(src.type==='text') return {...base,src:'bank',ref:src.id,type:'text',text:src.q,ans:src.accept,ansText:src.accept[0],explain:src.explain,suffix:src.suffix};
+  return {...base,src:'bank',ref:src.id,type:'num',text:src.q,ans:src.ans,ansText:String(src.ans),explain:src.explain,suffix:src.suffix};
+}
+
+/* 問題の「設計図」[出題元, 単元, レベル, 種] から同じ問題を作り直す（子ども用ページが使う） */
+function itemFromSpec(sp){
+  const [ref,unit,level,seed]=sp;
+  const src=GENS.find(x=>x.id===ref)||allBank().find(x=>x.id===ref);
+  if(!src) throw new Error('unknown question: '+ref);
+  return makeItem(src,unit,level,[],seed);
+}
+const specOf=it=>[it.ref,it.unit,it.level,it.seed];
+/* 問題集・生成器の内容が変わったら変わる値。ポータルと子ども用ページのバージョンが合っているか確かめる */
+const CODE_VER=1;
+function qv(){
+  let h=5381; const s=JSON.stringify([CODE_VER,allBank().map(b=>[b.id,b.q,b.choices||b.accept||b.ans,b.explain]),GENS.map(g=>[g.id,g.unit,g.level])]);
+  for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0;
+  return h.toString(36);
+}
+/* ---------- 図 ---------- */
+const SVG={
+  pyramid:`<svg viewBox="0 0 240 160" width="240" role="img" aria-label="三角形ABCと平行線DE"><g fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="120,12 20,148 220,148"/><line x1="76" y1="72" x2="164" y2="72"/></g>
+    <g font-size="13" fill="currentColor"><text x="115" y="10">A</text><text x="6" y="155">B</text><text x="224" y="155">C</text><text x="60" y="76">D</text><text x="168" y="76">E</text></g></svg>`,
+  hourglass:`<svg viewBox="0 0 240 160" width="240" role="img" aria-label="平行線ABとCD、交点O"><g fill="none" stroke="currentColor" stroke-width="1.5"><line x1="70" y1="20" x2="150" y2="20"/><line x1="20" y1="140" x2="220" y2="140"/><line x1="70" y1="20" x2="220" y2="140"/><line x1="150" y1="20" x2="20" y2="140"/></g>
+    <g font-size="13" fill="currentColor"><text x="58" y="16">A</text><text x="152" y="16">B</text><text x="6" y="152">C</text><text x="222" y="152">D</text><text x="112" y="74">O</text></g></svg>`,
+};
+
+
+/* ---------- 画面部品 ---------- */
+const stars=l=>'★'.repeat(l)+'☆'.repeat(3-l);
+const nl2br=s=>esc(s).replace(/\n/g,'<br>');
+function inputHtml(it,dis){
+  if(it.type==='choice') return it.choices.map((c,i)=>`<label style="display:block;margin:3px 0"><input type="radio" name="q${it.uid}" value="${i}" data-ans="${it.uid}" ${String(it.user)===String(i)?'checked':''} ${dis}> ${esc(c)}</label>`).join('');
+  const ph=it.type==='ratio'?'例 2:3':it.type==='num'?'数字（分数は 3/4、帯分数は 1と3/4）':'答え';
+  return `<input data-ans="${it.uid}" value="${esc(it.user)}" placeholder="${ph}" size="22" ${dis}> ${esc(it.suffix||'')}`;
+}
+
+window.QC={UNITS,SUBJ_ORDER,SUBJ_KEY,WEAK_UNIT_MAP,unitOf,rngFrom,GENS,BANK,allBank,isCorrect,parseNum,makeItem,itemFromSpec,specOf,qv,SVG,stars,nl2br,inputHtml,esc};
+})();
+</script>
+<script>/* 子ども用ページ：保護者から届いたリンクの中身（問題の設計図）から、問題を作り直して解く。
+ * 答えは、この端末のブラウザ（localStorage）に保存される。
+ * 採点が終わると、結果を自動で送る。送り先は、リンクに入っている保護者のGoogleフォームだけ（docs.google.com/forms 以外には送らない）。
+ * 送れなかったときは、電波のあるところで開くと、あとから自動で送る。 */
+(function(){
+'use strict';
+const QC=window.QC, esc=QC.esc, $=id=>document.getElementById(id);
+const LS='jk-kid-v1:';
+const lsGet=k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
+const pad2=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const todayKey=()=>ymd(new Date(Date.now()-5*3600e3));            /* 朝5時に日付が変わる */
+const DOW='日月火水木金土';
+const mdw=key=>{ const d=new Date(key+'T00:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]})`; };
+/* 日本語の答えも入るので、UTF-8のバイト列にしてから base64url にする（btoa は日本語をそのままでは扱えない） */
+const toBin=s=>{ let o=''; new TextEncoder().encode(s).forEach(c=>{ o+=String.fromCharCode(c); }); return o; };
+const fromBin=b=>new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0)));
+const b64u=s=>btoa(toBin(s)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const unb64u=t=>fromBin(atob(t.replace(/-/g,'+').replace(/_/g,'/')));
+
+/* ---------- リンクの読み取り ---------- */
+let payload=null, loadError='';
+function loadPayload(forced){
+  const h=forced!==undefined?forced:location.hash.replace(/^#/,'');
+  let text=h||lsGet(LS+'payload')||'';
+  if(!text){ loadError='none'; return; }
+  try{
+    const j=JSON.parse(unb64u(text));
+    if(!j||!Array.isArray(j.tests)) throw 0;
+    payload=j; if(h) lsSet(LS+'payload',h);
+  }catch(e){ loadError='broken'; }
+}
+/* 各回の保存（答え・採点済みか・送信ずみか） */
+const getSave=id=>{ try{ return JSON.parse(lsGet(LS+'t:'+id)||'null')||{a:[],graded:false}; }catch(e){ return {a:[],graded:false}; } };
+const putSave=(id,v)=>lsSet(LS+'t:'+id,JSON.stringify(v));
+
+/* ---------- 結果の自動送信（保護者のGoogleフォームへ） ---------- */
+function endpoint(){
+  const f=payload&&payload.f; if(!f) return null;
+  if(!/^https:\/\/docs\.google\.com\/forms\/d\/e\/[A-Za-z0-9_-]+\/formResponse$/.test(String(f.u))) return null;
+  if(!/^entry\.\d+$/.test(String(f.e))) return null;
+  return f;
+}
+async function postText(text){
+  const f=endpoint(); if(!f) return false;
+  try{
+    await fetch(f.u,{method:'POST',mode:'no-cors',credentials:'omit',body:new URLSearchParams({[f.e]:text})});
+    return true;
+  }catch(e){ return false; }
+}
+function codeFor(t,sv){
+  return 'JK1.'+b64u(JSON.stringify({id:t.id,a:sv.a.map(x=>x==null?'':String(x)),t:sv.gradedAt||'',s:(payload&&payload.s)||''}));
+}
+let flushing=false;
+/* 採点ずみで、まだ送れていない回を送る。何回呼んでも、送れた回は二重に送らない */
+async function flush(){
+  if(flushing||!payload||!endpoint()) return;
+  flushing=true;
+  try{
+    for(const t of payload.tests){
+      const sv=getSave(t.id); if(!sv.graded||sv.sent) continue;
+      if(await postText(codeFor(t,sv))){ sv.sent=true; sv.sentAt=new Date().toISOString(); putSave(t.id,sv); if(current&&current.meta.id===t.id) current.save=sv; }
+    }
+  } finally { flushing=false; }
+}
+function sendNote(t){
+  const sv=getSave(t.id);
+  if(!endpoint()) return {cls:'warn',text:'自動で送る設定がありません。下の結果コードを、保護者に送ってください。'};
+  return sv.sent?{cls:'good',text:'保護者に送りました ✓'}:{cls:'warn',text:'まだ送れていません。電波のあるところで、このページをもう一度開くと、自動で送ります。'};
+}
+
+/* ---------- 画面 ---------- */
+let current=null; /* いま開いている回 {meta, items, save} */
+function titleOf(t){ return t.type==='weekly'?`週末テスト（${t.items.length}問）`:`今日のテスト（${mdw(t.key)}・${t.items.length}問）`; }
+function stateOf(t){ const sv=getSave(t.id); return sv.graded?'done':sv.a.some(x=>x)?'part':'new'; }
+const fallbackBox=(id,code,note)=>`<details class="foot"><summary>うまく送れないときは</summary><p class="muted">下の文字をコピーして、保護者に送ってください。</p>${codeBox(id,code,note)}</details>`;
+
+function renderHome(){
+  current=null; window.scrollTo(0,0);
+  const main=$('main');
+  if(loadError==='none'){ main.innerHTML=`<div class="card"><h2>リンクを開いてください</h2><p>保護者から届いた、テストのリンクを開くと、ここに問題が出ます。</p></div>`; return; }
+  if(loadError==='broken'){ main.innerHTML=`<div class="card"><h2>リンクが読み取れませんでした</h2><p>リンクの最後までが、そろっていないようです。保護者に、もう一度送ってもらってください。</p></div>`; return; }
+  if(payload.qv!==QC.qv()){ main.innerHTML=`<div class="card"><h2>新しいリンクが必要です</h2><p>このページとリンクのバージョンが合っていません。保護者に、新しいリンクを作って送ってもらってください。</p></div>`; return; }
+  const today=todayKey();
+  const tests=payload.tests.filter(t=>t.type==='weekly'?t.key<=today:t.key===today);
+  let h='';
+  if(!tests.length){
+    h+=`<div class="card"><h2>今日のテストは、まだありません</h2><p>保護者に、新しいリンクを送ってもらってください。</p></div>`;
+  }
+  tests.sort((a,b)=>(a.type==='weekly'?0:1)-(b.type==='weekly'?0:1));
+  for(const t of tests){
+    const st=stateOf(t), lab={new:'まだ',part:'とちゅう',done:'おわり ✓'}[st];
+    const note=st==='done'?sendNote(t):null;
+    h+=`<div class="card row between"><div><h2>${esc(titleOf(t))}</h2><span class="tag ${st==='done'?'good':st==='part'?'warn':''}">${lab}</span>${note?` <span class="tag ${note.cls}">${note.cls==='good'?'送信ずみ':'送信まち'}</span>`:''}</div>
+      <button class="btn" data-open="${esc(t.id)}">${st==='done'?'結果を見る':st==='part'?'つづける':'はじめる'}</button></div>`;
+  }
+  // 自動で送れていない結果があるときだけ、予備の手段を出す
+  const unsent=payload.tests.filter(t=>{ const sv=getSave(t.id); return sv.graded&&!sv.sent; });
+  if(unsent.length){
+    const all=unsent.map(t=>codeFor(t,getSave(t.id))).join('\n');
+    h+=`<div class="card"><h2>まだ送れていない結果が${unsent.length}回分あります</h2><p class="muted">電波のあるところで、このページを開いたままにすると、自動で送ります。</p>
+      <div class="row"><button class="btn" data-resend>いま送る</button></div>${fallbackBox('allCode',all,unsent.length+'回分')}</div>`;
+  }
+  if(endpoint()) h+=`<details class="foot"><summary>保護者用</summary><p class="muted">結果が保護者のところに届くかを、確かめるボタンです。</p><div class="row"><button class="btn ghost" data-testsend>送信テスト</button></div></details>`;
+  if(payload.made) h+=`<p class="muted foot">リンクの作成日：${esc(mdw(payload.made))}</p>`;
+  main.innerHTML=h; bindCodeBoxes();
+  flush().then(()=>{ if(!current&&unsent.length&&payload.tests.every(t=>{ const sv=getSave(t.id); return !sv.graded||sv.sent; })) renderHome(); });
+}
+function codeBox(id,code,note){
+  return `<textarea id="${id}" class="code" readonly rows="3">${esc(code)}</textarea>
+    <div class="row"><button class="btn" data-copy="${id}">コピー</button><button class="btn ghost" data-share="${id}" hidden>共有</button><span class="muted">${esc(note||'')}</span></div>`;
+}
+function bindCodeBoxes(){ document.querySelectorAll('[data-share]').forEach(b=>{ b.hidden=!navigator.share; }); }
+
+function openTest(id){
+  const meta=payload.tests.find(t=>t.id===id); if(!meta) return;
+  let items; try{ items=meta.items.map(QC.itemFromSpec); }catch(e){ $('main').innerHTML=`<div class="card"><h2>問題を読み込めませんでした</h2><p>保護者に、新しいリンクを送ってもらってください。</p></div>`; return; }
+  const sv=getSave(id); items.forEach((it,i)=>{ it.user=sv.a[i]==null?'':String(sv.a[i]); });
+  current={meta,items,save:sv}; renderTest(); window.scrollTo(0,0);
+  if(sv.graded) flush().then(()=>{ if(current&&current.meta.id===id) renderTest(); });
+}
+function renderTest(){
+  const {meta,items,save:sv}=current, graded=sv.graded;
+  let h=`<div class="row between"><button class="btn ghost" data-home>← もどる</button><span class="tag ${graded?'good':''}">${graded?'採点ずみ':'とちゅうまで自動で保存されます'}</span></div>
+    <h2 class="ttl">${esc(titleOf(meta))}</h2>`;
+  if(graded){
+    items.forEach(it=>{ it.ok=QC.isCorrect(it,it.user); });
+    const ok=items.filter(i=>i.ok).length, note=sendNote(meta);
+    h+=`<div class="card"><h2>結果：${ok} / ${items.length}問</h2><p class="muted" style="margin:0 0 6px">まちがえた問題は、あとで出なおします。</p><span class="tag ${note.cls}">${esc(note.text)}</span>
+      ${endpoint()&&!sv.sent?`<div class="row" style="margin-top:8px"><button class="btn" data-resend>いま送る</button></div>`:''}</div>`;
+  }
+  h+=items.map((it,ix)=>{
+    const u=QC.UNITS[it.unit], dis=graded?'disabled':'';
+    const res=graded?`<div class="res"><b class="${it.ok?'okc':'ngc'}">${it.ok?'○ 正解':'× 不正解'}</b>　正解：<b>${esc(it.ansText)}${esc(it.suffix||'')}</b>
+        ${it.type==='choice'&&!it.ok&&it.user!==''?`<span class="muted">（あなたの答え：${esc(it.choices[+it.user])}）</span>`:''}
+        <div>${QC.nl2br(it.explain||'')}</div></div>`:'';
+    return `<div class="card ${graded?(it.ok?'ok':'ng'):''}">
+      <div class="row between"><b>第${ix+1}問</b><span class="row"><span class="tag">${esc(u.subj)}</span><span class="tag">${esc(u.name)}</span></span></div>
+      <p class="q">${QC.nl2br(it.text)}</p>${it.svg?`<div class="fig">${QC.SVG[it.svg]}<div class="muted">※図は正確ではありません</div></div>`:''}
+      <div>${QC.inputHtml(it,dis)}</div>${res}</div>`;
+  }).join('');
+  if(!graded) h+=`<div class="card center"><button class="btn big" data-grade>採点する</button><p class="muted">空らんがあると、まちがいになります。採点すると、結果は自動で保護者に届きます。</p></div>`;
+  else if(!sv.sent) h+=`<div class="card">${fallbackBox('code',codeFor(meta,sv),'この回の結果コード')}</div>`;
+  $('main').innerHTML=h; bindCodeBoxes();
+}
+let saveTimer=null;
+function saveAnswers(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ if(current&&!current.save.graded) putSave(current.meta.id,current.save); },200); }
+
+/* ---------- 操作 ---------- */
+function confirmBox(msg){ return new Promise(res=>{ const b=$('ask'); $('askMsg').textContent=msg; b.hidden=false; $('askOk').focus(); const done=v=>{ b.hidden=true; res(v); }; $('askOk').onclick=()=>done(true); $('askNo').onclick=()=>done(false); }); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2800); }
+async function copyFrom(id){
+  const ta=$(id); if(!ta) return; ta.focus(); ta.select();
+  try{ await navigator.clipboard.writeText(ta.value); toast('コピーしました'); }
+  catch(e){ try{ ta.setSelectionRange(0,ta.value.length); document.execCommand('copy'); toast('コピーしました'); }catch(e2){ toast('選んだ文字を、長押ししてコピーしてください'); } }
+}
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-open],[data-home],[data-grade],[data-copy],[data-share],[data-resend],[data-testsend]'); if(!t) return;
+  if(t.dataset.open) return openTest(t.dataset.open);
+  if('home' in t.dataset) return renderHome();
+  if(t.dataset.copy) return copyFrom(t.dataset.copy);
+  if(t.dataset.share){ const ta=$(t.dataset.share); try{ await navigator.share({text:ta.value}); }catch(err){} return; }
+  if('resend' in t.dataset){ await flush(); toast(payload.tests.every(x=>{ const sv=getSave(x.id); return !sv.graded||sv.sent; })?'送りました':'まだ送れていません。電波のあるところで、もう一度ためしてください'); if(current) renderTest(); else renderHome(); return; }
+  if('testsend' in t.dataset){ const ok=await postText('JKTEST.'+((payload&&payload.s)||'')+'.'+Date.now()); toast(ok?'テストを送りました。保護者のポータルで、届いたか確かめてください':'送れませんでした。電波のあるところで、もう一度ためしてください'); return; }
+  if('grade' in t.dataset && current){
+    const blank=current.items.filter(i=>i.user==='').length;
+    if(blank&&!(await confirmBox(`${blank}問が空らんです。採点しますか？（空らんはまちがいになります）`))) return;
+    current.save.a=current.items.map(i=>i.user); current.save.graded=true; current.save.gradedAt=new Date().toISOString().slice(0,19); putSave(current.meta.id,current.save);
+    renderTest(); window.scrollTo(0,0);
+    const id=current.meta.id;
+    await flush(); if(current&&current.meta.id===id) renderTest();
+  }
+});
+document.addEventListener('input',e=>{
+  const id=e.target.dataset&&e.target.dataset.ans; if(!id||!current||current.save.graded) return;
+  const i=current.items.findIndex(x=>x.uid===id); if(i<0) return;
+  current.items[i].user=e.target.value; current.save.a=current.items.map(x=>x.user); saveAnswers();
+});
+document.addEventListener('change',e=>{
+  const id=e.target.dataset&&e.target.dataset.ans; if(!id||!current||current.save.graded||e.target.type!=='radio') return;
+  const i=current.items.findIndex(x=>x.uid===id); if(i<0) return;
+  current.items[i].user=e.target.value; current.save.a=current.items.map(x=>x.user); saveAnswers();
+});
+window.addEventListener('hashchange',()=>{ loadError=''; payload=null; loadPayload(); renderHome(); });
+window.addEventListener('pagehide',()=>{ if(current&&!current.save.graded) putSave(current.meta.id,current.save); });
+window.addEventListener('online',()=>{ flush().then(()=>{ if(!current) renderHome(); }); });
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') flush(); });
+
+loadPayload(); renderHome();
+window.KID={loadPayload:()=>payload,current:()=>current,flush,load:t=>{ loadError=''; payload=null; loadPayload(t); renderHome(); }}; /* load は動作確認用 */
+})();
+</script>
+</body>
+</html>
